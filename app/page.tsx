@@ -151,6 +151,7 @@ export default function Home() {
           </p>
         </div>
         <div className={styles.actions}>
+          <div className={styles.contact}>聯繫：songtaozhang@gmail.com</div>
           <button
             className={styles.secondaryButton}
             onClick={() => void loadData(true)}
@@ -160,7 +161,11 @@ export default function Home() {
             <RefreshCw size={18} className={refreshing ? styles.spin : ""} />
             刷新
           </button>
-          <a className={styles.primaryButton} href={staticAssetPath("/data/latest.xlsx")}>
+          <a
+            className={styles.primaryButton}
+            href={staticAssetPath("/data/latest.xlsx")}
+            download="hk-corp-actions-latest.xlsx"
+          >
             <Download size={18} />
             下載 Excel
           </a>

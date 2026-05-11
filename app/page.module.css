@@ -52,6 +52,14 @@
   justify-content: flex-end;
 }
 
+.contact {
+  width: 100%;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
 .primaryButton,
 .secondaryButton {
   min-height: 42px;

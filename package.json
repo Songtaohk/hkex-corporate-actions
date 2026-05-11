@@ -1,0 +1,41 @@
+{
+  "name": "hkex-corporate-actions",
+  "version": "1.0.0",
+  "description": "Traditional Chinese dashboard for Hong Kong IPO, placement, and dividend events with English Excel export.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "update-data": "tsx scripts/update-data.js",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "keywords": [
+    "hkex",
+    "ipo",
+    "dividends",
+    "excel"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1",
+    "lucide-react": "^1.14.0",
+    "next": "^16.2.6",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.6",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}

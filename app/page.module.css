@@ -1,0 +1,404 @@
+.shell {
+  width: min(1480px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 40px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px 0 20px;
+}
+
+.kicker {
+  margin: 0 0 8px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.subtitle {
+  max-width: 760px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.actions,
+.controls,
+.tabs,
+.searchBox,
+.sortBox,
+.tableHeaderActions,
+.rangeBadge,
+.sourceLink {
+  display: flex;
+  align-items: center;
+}
+
+.actions {
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.primaryButton {
+  background: var(--primary);
+  color: white;
+}
+
+.primaryButton:hover {
+  background: var(--primary-dark);
+}
+
+.secondaryButton {
+  background: white;
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.secondaryButton:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  margin: 8px 0 20px;
+}
+
+.summaryCard {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+  min-height: 86px;
+}
+
+.summaryCard span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.summaryCard strong {
+  display: block;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.wideCard {
+  grid-column: span 2;
+}
+
+.controls {
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.tabs {
+  background: #e9edf2;
+  border-radius: 8px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.tab,
+.activeTab {
+  min-width: 96px;
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: #425466;
+}
+
+.activeTab {
+  background: white;
+  color: var(--text);
+  box-shadow: 0 4px 14px rgba(24, 32, 43, 0.1);
+  font-weight: 700;
+}
+
+.searchBox {
+  width: min(360px, 100%);
+  min-height: 44px;
+  padding: 0 12px;
+  gap: 8px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.searchBox input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #efc2bd;
+  color: var(--bad);
+  background: #fff7f5;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.tablePanel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.tableHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tableHeader h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.tableHeader p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.rangeBadge {
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--primary-dark);
+  background: #f3faf9;
+  white-space: nowrap;
+}
+
+.tableHeaderActions {
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sortBox {
+  min-height: 38px;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.sortBox span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sortBox select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.table th {
+  background: #f8fafc;
+  color: #465568;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.estimatedRow {
+  background: #fffaf3;
+}
+
+.notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.noteTag,
+.estimateTag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.noteTag {
+  background: #eef2f6;
+  color: #475467;
+}
+
+.estimateTag {
+  background: #fff0d7;
+  color: var(--warn);
+}
+
+.sourceLink {
+  gap: 5px;
+  color: var(--primary-dark);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.sourceLink:hover {
+  text-decoration: underline;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.emptyState {
+  padding: 46px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 860px) {
+  .shell {
+    width: min(100% - 24px, 1480px);
+    padding-top: 16px;
+  }
+
+  .header,
+  .controls,
+  .tableHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
+    justify-content: stretch;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    justify-content: center;
+    flex: 1 1 160px;
+  }
+
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wideCard {
+    grid-column: span 2;
+  }
+
+  .tabs {
+    width: 100%;
+  }
+
+  .tab,
+  .activeTab {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .searchBox {
+    width: 100%;
+  }
+
+  .tableHeaderActions,
+  .sortBox,
+  .sortBox select {
+    width: 100%;
+  }
+
+  .tableHeaderActions {
+    justify-content: stretch;
+  }
+
+  .rangeBadge {
+    justify-content: center;
+  }
+}

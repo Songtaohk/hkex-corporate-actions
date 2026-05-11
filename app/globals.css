@@ -1,0 +1,37 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #18202b;
+  --muted: #667085;
+  --line: #d9dee7;
+  --primary: #1f6f78;
+  --primary-dark: #14555c;
+  --accent: #b65f2a;
+  --ok: #2f7a4f;
+  --warn: #9a650f;
+  --bad: #a94242;
+  --shadow: 0 14px 34px rgba(24, 32, 43, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    Inter, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", Arial,
+    sans-serif;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}

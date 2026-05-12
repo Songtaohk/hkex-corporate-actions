@@ -210,10 +210,13 @@ export function parseDividendEvents(
     const normalizedDates = [...fullDateMatches, ...shortDateMatches]
       .map((match) => normalizeDoeDate(match[1], entry.reportYear))
       .filter((value): value is string => Boolean(value));
-    const expectedDividendDate =
-      normalizedDates.find((value) => isWithinWindow(value, start, end)) ||
-      normalizedDates[0] ||
-      null;
+    const dividendDate = estimateDividendPaymentDate(
+      blockText,
+      normalizedDates,
+      start,
+      end,
+    );
+    const expectedDividendDate = dividendDate.date;
 
     if (!expectedDividendDate || !isWithinWindow(expectedDividendDate, start, end)) {
       continue;
@@ -224,6 +227,7 @@ export function parseDividendEvents(
       null;
 
     const notes = ["官方分紅及權益表"];
+    if (dividendDate.note) notes.push(dividendDate.note);
     if (!blockText.match(/total/i)) notes.push("分紅總規模未公布");
     if (perShareMatches.length > 1) notes.push("同一公司有多項分紅");
 
@@ -242,6 +246,30 @@ export function parseDividendEvents(
   }
 
   return events;
+}
+
+function estimateDividendPaymentDate(
+  blockText: string,
+  normalizedDates: string[],
+  start: Date,
+  end: Date,
+) {
+  const disclosedPaymentDate = pickDateNear(blockText, [
+    new RegExp(`(?:payable|payment date|paid on|payment)[\\s\\S]{0,160}?${datePattern}`, "i"),
+  ]);
+
+  if (disclosedPaymentDate && isWithinWindow(disclosedPaymentDate, start, end)) {
+    return { date: disclosedPaymentDate, note: "派息日按公告披露" };
+  }
+
+  const recordDate = normalizedDates.at(-1) ?? null;
+  if (!recordDate) return { date: null, note: null };
+
+  const estimatedPaymentDate = addBusinessDays(recordDate, 8);
+  return {
+    date: estimatedPaymentDate,
+    note: "派息日按記錄日後8個工作日推算",
+  };
 }
 
 export function parsePlacementEntitlements(

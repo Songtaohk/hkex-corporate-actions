@@ -47,7 +47,7 @@ const placementSortOptions: Array<{ key: PlacementSortKey; label: string }> = [
 ];
 
 const dividendSortOptions: Array<{ key: DividendSortKey; label: string }> = [
-  { key: "dividendDate", label: "按分紅日" },
+  { key: "dividendDate", label: "按派息日" },
   { key: "totalAmount", label: "按分紅總規模由大到小" },
 ];
 
@@ -513,7 +513,7 @@ function DividendTable({ rows }: { rows: DividendEvent[] }) {
         <tr>
           <th>公司名稱</th>
           <th>代號</th>
-          <th>預計分紅日</th>
+          <th>預計派息日</th>
           <th>分紅總規模</th>
           <th>每股分紅</th>
           <th>備註</th>

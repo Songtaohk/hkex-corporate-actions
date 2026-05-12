@@ -75,7 +75,7 @@ function mapDividendRow(item: DividendEvent) {
   return {
     "Company Name": item.companyName,
     "Stock Code": toEnglishValue(item.stockCode),
-    "Expected Dividend Date": item.expectedDividendDate || notDisclosed,
+    "Expected Payment Date": item.expectedDividendDate || notDisclosed,
     "Expected Total Dividend Amount":
       item.expectedTotalDividendAmount || notDisclosed,
     "Dividend per Share": item.dividendPerShare || notDisclosed,
@@ -87,6 +87,12 @@ function mapDividendRow(item: DividendEvent) {
 
 function toEnglishNotes(notes: string[]) {
   const translated = notes.map((note) => {
+    if (note.includes("派息日按公告披露")) {
+      return "Payment date disclosed by announcement";
+    }
+    if (note.includes("派息日按記錄日後8個工作日推算")) {
+      return "Payment date estimated as 8 business days after record date";
+    }
     if (note.includes("按每股分紅預測")) {
       return "Estimated from dividend per share";
     }

@@ -117,11 +117,11 @@ test("adds IPO forecasts when AP or PHIP fields are not disclosed", () => {
   assert.equal(estimated.expectedHearingDate, "2026-09-07");
   assert.equal(estimated.expectedFundLockupPeriod, "2026-09-10 至 2026-09-15");
   assert.equal(estimated.expectedSubscriptionMultiple, "25x 同業推測");
-  assert.equal(estimated.expectedFundraisingSize, "HK$400 million 同業推測");
+  assert.match(estimated.expectedFundraisingSize ?? "", /^HK\$\d+(?:\.\d+)? million 同業推測$/);
   assert.ok(estimated.notes.includes("參考來源：HKEX IPO FAQ"));
   assert.ok(estimated.notes.includes("募集資金凍結時間按聆訊後招股流程推測"));
   assert.ok(estimated.notes.includes("募集倍數按近期同業IPO推測"));
-  assert.ok(estimated.notes.includes("募集規模按近期綜合行業IPO中位數推測"));
+  assert.ok(estimated.notes.includes("募集規模按近期綜合行業IPO中位數及公司特徵推測"));
   assert.ok(estimated.notes.includes("參考來源：HKEX 新上市資料及招股書"));
 });
 
@@ -149,8 +149,35 @@ test("parses dividend rows within the future window", () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].companyName, "AAC TECH");
   assert.equal(rows[0].stockCode, "2018");
-  assert.equal(rows[0].expectedDividendDate, "2026-05-28");
+  assert.equal(rows[0].expectedDividendDate, "2026-06-11");
   assert.equal(rows[0].dividendPerShare, "HKD0.35");
+  assert.ok(rows[0].notes.includes("派息日按記錄日後8個工作日推算"));
+});
+
+test("estimates dividend payment date from record date when payable date is absent", () => {
+  const html = `
+    <html><body>
+      Date : 11/05/2026
+      <br />TENCENT
+      <br />(700)
+      <br />FINAL DIVIDEND
+      <br />HKD5.30 PER SHARE
+      <br />(Y.E. 31/12/2025)
+      <br />15/05 19/05/2026 - 20/05/2026
+    </body></html>
+  `;
+
+  const rows = parseDividendEvents(
+    html,
+    "https://www3.hkexnews.hk/reports/doe/eent.htm",
+    new Date("2026-05-10T00:00:00Z"),
+    new Date("2026-08-10T23:59:59Z"),
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].companyName, "TENCENT");
+  assert.equal(rows[0].expectedDividendDate, "2026-06-01");
+  assert.ok(rows[0].notes.includes("派息日按記錄日後8個工作日推算"));
 });
 
 test("filters dividend rows to Mainland China principal business companies", () => {

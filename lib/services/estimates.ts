@@ -125,14 +125,19 @@ export function applyIpoEstimates(items: IpoEvent[], now = new Date()) {
     }
 
     if (!next.expectedFundraisingSize) {
-      const benchmark =
+      const baseBenchmark =
         fundraisingBenchmarks.get(industry.key) ?? industry.fundraisingHkdMillion;
+      const benchmark = estimateCompanyFundraisingSize(
+        item.companyName,
+        industry,
+        baseBenchmark,
+      );
       next = {
         ...next,
         expectedFundraisingSize: `${formatHkdMillion(benchmark)} 同業推測`,
       };
       notes.delete("募集規模未公布");
-      notes.add(`募集規模按近期${industry.label}IPO中位數推測`);
+      notes.add(`募集規模按近期${industry.label}IPO中位數及公司特徵推測`);
       notes.add("參考來源：HKEX 新上市資料及招股書");
     }
 
@@ -395,6 +400,31 @@ function formatHkdMillion(value: number) {
   return `HK$${roundToOneDecimal(value)} million`;
 }
 
+function estimateCompanyFundraisingSize(
+  companyName: string,
+  industry: IpoIndustry,
+  baseHkdMillion: number,
+) {
+  const name = companyName.toUpperCase();
+  let scale = 0.65 + stableOffset(`${industry.key}:${companyName}`, 100) / 100;
+
+  if (/GROUP|HOLDINGS|CORPORATION|COMPANY LIMITED|LIMITED$/.test(name)) scale += 0.08;
+  if (/SEMICON|CHIP|AI|ROBOT|INTELLIGENT|AUTO|EV|CLOUD|DATA/.test(name)) scale += 0.18;
+  if (/BIO|PHARMA|THERAP|MEDICAL|HEALTH/.test(name)) scale += 0.12;
+  if (/BANK|INSUR|FINANC|FUND|REIT/.test(name)) scale += 0.2;
+  if (/-\s?B\b|PRE-REVENUE|PRE REVENUE/.test(name)) scale -= 0.18;
+  if (/OFC|PRIVATE CREDIT|SMALL|MICRO/.test(name)) scale -= 0.25;
+
+  const minScale = industry.key === "financialProperty" ? 0.55 : 0.5;
+  const maxScale = industry.key === "technology" || industry.key === "healthcare" ? 1.9 : 1.7;
+  const boundedScale = Math.min(maxScale, Math.max(minScale, scale));
+  return roundToNearestTen(baseHkdMillion * boundedScale);
+}
+
+function roundToNearestTen(value: number) {
+  return Math.max(50, Math.round(value / 10) * 10);
+}
+
 const industryMap: Record<string, IpoIndustry> = {
   healthcare: {
     key: "healthcare",
@@ -597,7 +627,7 @@ function findShareholding(
   if (direct) return direct;
 
   if (/^8\d{4}$/.test(normalized)) {
-    return shareholdings.get(normalized.slice(1));
+    return shareholdings.get(String(Number(normalized.slice(1))));
   }
 
   return undefined;

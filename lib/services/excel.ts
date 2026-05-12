@@ -87,6 +87,9 @@ function mapDividendRow(item: DividendEvent) {
 
 function toEnglishNotes(notes: string[]) {
   const translated = notes.map((note) => {
+    if (note.includes("已合併人民幣櫃台重複項")) {
+      return "Duplicate RMB counter row merged";
+    }
     if (note.includes("派息日按公告披露")) {
       return "Payment date disclosed by announcement";
     }

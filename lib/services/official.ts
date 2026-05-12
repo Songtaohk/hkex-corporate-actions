@@ -1,5 +1,6 @@
 import type {
   DashboardResponse,
+  DividendEvent,
   IpoEvent,
   PlacementEvent,
   SourceStatus,
@@ -159,9 +160,11 @@ export async function getDashboardData(forceRefresh = false) {
       ? parseDividendEvents(dividendGemHtml, DIVIDEND_GEM_URL, start, end)
       : []),
   ];
-  const dividends = estimateDividendTotals(
-    filterMainlandBusinessDividends(allDividends, securities),
-    southboundShareholding,
+  const dividends = dedupeDividendCounters(
+    estimateDividendTotals(
+      filterMainlandBusinessDividends(allDividends, securities),
+      southboundShareholding,
+    ),
   );
 
   const entitlementPlacements = [
@@ -336,6 +339,60 @@ async function getPdfCandidates(seedUrl: string) {
   } catch {
     return [];
   }
+}
+
+function dedupeDividendCounters(items: DividendEvent[]) {
+  const byKey = new Map<string, DividendEvent>();
+
+  for (const item of items) {
+    const key = [
+      normalizeDividendCounterCode(item.stockCode),
+      item.expectedDividendDate ?? "na",
+      normalizeDividendPerShareKey(item.dividendPerShare),
+    ].join("|");
+    const existing = byKey.get(key);
+
+    if (!existing) {
+      byKey.set(key, item);
+      continue;
+    }
+
+    const preferred = preferPrimaryDividendCounter(existing, item);
+    byKey.set(key, {
+      ...preferred,
+      expectedTotalDividendAmount:
+        preferred.expectedTotalDividendAmount ||
+        existing.expectedTotalDividendAmount ||
+        item.expectedTotalDividendAmount,
+      notes: Array.from(
+        new Set([
+          ...preferred.notes,
+          "已合併人民幣櫃台重複項",
+        ]),
+      ),
+    });
+  }
+
+  return Array.from(byKey.values());
+}
+
+function preferPrimaryDividendCounter(a: DividendEvent, b: DividendEvent) {
+  const score = (item: DividendEvent) =>
+    (isRmbCounter(item) ? 0 : 10) + (item.expectedTotalDividendAmount ? 1 : 0);
+  return score(b) > score(a) ? b : a;
+}
+
+function isRmbCounter(item: DividendEvent) {
+  return /^8\d{4}$/.test(item.stockCode) || /-R$/i.test(item.companyName) || /-WR$/i.test(item.companyName);
+}
+
+function normalizeDividendCounterCode(stockCode: string) {
+  if (/^8\d{4}$/.test(stockCode)) return String(Number(stockCode.slice(1)));
+  return String(Number(stockCode.match(/\d{1,5}/)?.[0] ?? stockCode));
+}
+
+function normalizeDividendPerShareKey(value: string | null) {
+  return (value ?? "na").toUpperCase().replace(/\s+/g, "");
 }
 
 function dedupePlacements(items: PlacementEvent[]) {

@@ -57,6 +57,17 @@ function staticAssetPath(path: string) {
   return `${basePath}${path}`;
 }
 
+function formatMinute(value: Date) {
+  return value.toLocaleString("zh-HK", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function toDateLabel(value: string | null) {
   return value || "未公布";
 }
@@ -76,6 +87,7 @@ export default function Home() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ipoSort, setIpoSort] = useState<IpoSortKey>("listingDate");
   const [placementSort, setPlacementSort] =
@@ -96,6 +108,7 @@ export default function Home() {
       }
       const json = (await response.json()) as DashboardResponse;
       setData(json);
+      setLastRefreshAt(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : "無法載入資料");
     } finally {
@@ -178,8 +191,11 @@ export default function Home() {
         <SummaryCard label="中資分紅" value={data?.dividends.length ?? 0} />
         <SummaryCard
           label="最後更新"
-          value={data ? new Date(data.generatedAt).toLocaleString("zh-HK") : "--"}
-          wide
+          value={data ? formatMinute(new Date(data.generatedAt)) : "--"}
+        />
+        <SummaryCard
+          label="刷新時間"
+          value={lastRefreshAt ? formatMinute(lastRefreshAt) : "--"}
         />
       </section>
 

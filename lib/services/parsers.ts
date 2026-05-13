@@ -301,7 +301,7 @@ export function parseDividendEvents(
 
     const perShareMatches = [
       ...blockText.matchAll(
-        /((?:FINAL|INTERIM|SPECIAL|MONTHLY|QUARTERLY)?\s*(?:DIVIDEND|DISTRIBUTION)[^。.;]*?(?:HKD|RMB|USD|US\$|HK\$)\s*[\d.]+[^。.;]*?PER SHARE)/gi,
+        /((?:FINAL|INTERIM|SPECIAL|MONTHLY|QUARTERLY)?\s*(?:DIVIDEND|DISTRIBUTION)[^。.;]*?(?:HKD|RMB|USD|US\$|HK\$)\s*[\d.]+[^。.;]*?PER\s+(?:10\s+)?SHARES?)/gi,
       ),
     ];
     const fullDateMatches = [...blockText.matchAll(/\b(\d{2}\/\d{2}\/20\d{2})\b/g)];
@@ -324,9 +324,7 @@ export function parseDividendEvents(
       continue;
     }
 
-    const dividendPerShare =
-      blockText.match(/((?:HKD|RMB|USD|US\$|HK\$)\s*[\d.]+)\s+PER SHARE/i)?.[1] ||
-      null;
+    const dividendPerShare = parseDividendPerShareFromBlock(blockText);
 
     const notes = ["官方分紅及權益表"];
     if (dividendDate.note) notes.push(dividendDate.note);
@@ -348,6 +346,24 @@ export function parseDividendEvents(
   }
 
   return events;
+}
+
+function parseDividendPerShareFromBlock(blockText: string) {
+  const match = blockText.match(
+    /\b(HKD|RMB|USD|US\$|HK\$)\s*([\d.]+)\s+PER\s+(10\s+)?SHARES?\b/i,
+  );
+  if (!match) return null;
+
+  const currency = match[1].toUpperCase().replace("HK$", "HKD").replace("US$", "USD");
+  const divisor = match[3] ? 10 : 1;
+  const amount = Number(match[2]) / divisor;
+  if (!Number.isFinite(amount)) return null;
+
+  return currency + formatPerShareAmount(amount);
+}
+
+function formatPerShareAmount(value: number) {
+  return value.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function estimateDividendPaymentDate(

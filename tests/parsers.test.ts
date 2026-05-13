@@ -179,6 +179,31 @@ test("parses dividend rows within the future window", () => {
   assert.ok(rows[0].notes.includes("派息日按記錄日後8個工作日推算"));
 });
 
+test("normalizes dividend amounts declared per 10 shares", () => {
+  const html = `
+    <html><body>
+      Date : 12/05/2026
+      <br />OMNIVISION
+      <br />(501)
+      <br />FINAL DIVIDEND
+      <br />RMB1.25 PER 10 SHARES
+      <br />(Y.E. 31/12/2025)
+      <br />14/05 18/05/2026 - 19/05/2026
+    </body></html>
+  `;
+
+  const rows = parseDividendEvents(
+    html,
+    "https://www3.hkexnews.hk/reports/doe/eent.htm",
+    new Date("2026-05-10T00:00:00Z"),
+    new Date("2026-08-10T23:59:59Z"),
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].companyName, "OMNIVISION");
+  assert.equal(rows[0].dividendPerShare, "RMB0.125");
+});
+
 test("estimates dividend payment date from record date when payable date is absent", () => {
   const html = `
     <html><body>

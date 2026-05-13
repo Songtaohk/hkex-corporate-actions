@@ -5,6 +5,12 @@ import { isWithinWindow, pickDateNear, toIsoDate } from "@/lib/utils/date";
 const datePattern =
   "((?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s*)?(?:\\d{1,2}\\s+[A-Za-z]{3,9}|[A-Za-z]{3,9}\\s+\\d{1,2},?)\\s+20\\d{2}|20\\d{2}[-/.]\\d{1,2}[-/.]\\d{1,2})";
 
+interface IpoOfferTermsEstimate {
+  value: string;
+  shares: number;
+  offerPriceHkd: number;
+}
+
 export function parseIpoRows(html: string, sourceUrl: string): IpoEvent[] {
   const rows: IpoEvent[] = [];
   const rowRegex = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
@@ -146,9 +152,12 @@ export function enrichIpoFromText(item: IpoEvent, text: string): IpoEvent {
   const multipleMatch = text.match(
     /(?:over-subscribed|oversubscribed|subscription)[^.]{0,140}?approximately\s+([\d,.]+)\s+times/i,
   );
-  const fundsMatch = text.match(
-    /(?:net proceeds|gross proceeds|funds raised|raise)[^.]{0,180}?((?:HK\$|HKD|RMB|US\$|USD)\s?[\d,.]+\s?(?:million|billion|m|bn)?)/i,
-  );
+  const offerTermsEstimate = estimateIpoFundraisingFromOfferTerms(text);
+  const fundsMatch = offerTermsEstimate
+    ? null
+    : text.match(
+        /(?:net proceeds|gross proceeds)[^.]{0,180}?((?:HK\$|HKD|RMB|US\$|USD)\s?[\d,.]+\s?(?:million|billion|m|bn)?)/i,
+      );
 
   const hearingDate = pickDateNear(text, [
     new RegExp(`hearing date[\\s\\S]{0,180}?${datePattern}`, "i"),
@@ -158,7 +167,11 @@ export function enrichIpoFromText(item: IpoEvent, text: string): IpoEvent {
   const notes = new Set(item.notes);
   if (expectedListingDate) notes.delete("部分欄位未公布");
   if (offerStart && (refundDate || expectedListingDate)) notes.add("募集資金凍結時間按規則估算");
-  if (fundsMatch) notes.delete("部分欄位未公布");
+  if (offerTermsEstimate || fundsMatch) notes.delete("部分欄位未公布");
+  if (offerTermsEstimate) {
+    notes.delete("募集規模未公布");
+    notes.add("募集規模按發售股數及發售價計算");
+  }
   if (multipleMatch && !/over-subscribed|oversubscribed/i.test(multipleMatch[0])) {
     notes.add("募集倍數按規則估算");
   }
@@ -177,11 +190,100 @@ export function enrichIpoFromText(item: IpoEvent, text: string): IpoEvent {
       hearingDate && hearingDate !== expectedListingDate
         ? hearingDate
         : item.expectedHearingDate,
-    expectedFundraisingSize: fundsMatch
-      ? fundsMatch[1].replace(/\s+/g, " ")
-      : item.expectedFundraisingSize,
+    expectedFundraisingSize: offerTermsEstimate
+      ? offerTermsEstimate.value
+      : fundsMatch
+        ? fundsMatch[1].replace(/\s+/g, " ")
+        : item.expectedFundraisingSize,
     notes: Array.from(notes),
   };
+}
+
+function estimateIpoFundraisingFromOfferTerms(
+  text: string,
+): IpoOfferTermsEstimate | null {
+  const normalizedText = text.replace(/\s+/g, " ");
+  const offerPriceHkd = extractFinalHkdOfferPrice(normalizedText);
+  const shares = extractOfferShares(normalizedText);
+
+  if (!offerPriceHkd || !shares) return null;
+
+  const amountHkd = shares * offerPriceHkd;
+  if (!Number.isFinite(amountHkd) || amountHkd < 10_000_000) return null;
+
+  return {
+    value: formatHkdAmount(amountHkd),
+    shares,
+    offerPriceHkd,
+  };
+}
+
+function extractFinalHkdOfferPrice(text: string) {
+  const patterns = [
+    /(?:final\s+)?offer price[^.]{0,140}?(?:HK\$|HKD)\s*([\d,.]+)/i,
+    /(?:HK\$|HKD)\s*([\d,.]+)\s*(?:per|for each)\s+(?:H\s+)?(?:Offer\s+)?Share/i,
+    /priced at\s+(?:HK\$|HKD)\s*([\d,.]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+
+    const index = match.index ?? 0;
+    const context = text.slice(Math.max(0, index - 80), index + match[0].length + 80);
+    if (/not more than|not less than|range|between/i.test(context)) continue;
+
+    const price = Number(match[1].replace(/,/g, ""));
+    if (Number.isFinite(price) && price > 0 && price < 10_000) return price;
+  }
+
+  return null;
+}
+
+function extractOfferShares(text: string) {
+  const candidates: Array<{ shares: number; score: number }> = [];
+  const sharePattern = /([\d,]{5,})\s+(?:H\s+)?(?:Offer\s+)?Shares?\b/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = sharePattern.exec(text))) {
+    const shares = Number(match[1].replace(/,/g, ""));
+    if (!Number.isFinite(shares) || shares <= 0) continue;
+
+    const start = Math.max(0, match.index - 180);
+    const end = Math.min(text.length, match.index + match[0].length + 180);
+    const context = text.slice(start, end);
+
+    if (!/global offering|offering|offer shares|public offer|international offer/i.test(context)) {
+      continue;
+    }
+    if (/issued share capital|shares in issue|total number of issued|market capitali[sz]ation/i.test(context)) {
+      continue;
+    }
+
+    let score = 1;
+    if (/total of|total number of|comprises|comprising|initially comprises/i.test(context)) {
+      score += 3;
+    }
+    if (/global offering/i.test(context)) score += 2;
+    if (/public offer|hong kong public offer/i.test(context)) score -= 1;
+    if (/international offer/i.test(context)) score -= 1;
+
+    candidates.push({ shares, score });
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score || b.shares - a.shares);
+  return candidates[0].shares;
+}
+
+function formatHkdAmount(amountHkd: number) {
+  const amountInMillion = amountHkd / 1_000_000;
+  const rounded = Math.round(amountInMillion * 10) / 10;
+  if (rounded >= 1_000) {
+    const billion = Math.round((rounded / 1_000) * 10) / 10;
+    return "HK$" + billion + " billion";
+  }
+  return "HK$" + rounded + " million";
 }
 
 export function parseDividendEvents(

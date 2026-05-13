@@ -46,6 +46,31 @@ test("parses HKEX new listing rows and enriches IPO fields from PDF text", () =>
   assert.ok(enriched.notes.includes("募集資金凍結時間按規則估算"));
 });
 
+test("computes IPO fundraising size from offer shares and offer price", () => {
+  const row = {
+    id: "ipo-1511",
+    kind: "ipo" as const,
+    companyName: "UISEE Technologies (Beijing) Co., Ltd.",
+    stockCode: "1511",
+    expectedListingDate: null,
+    expectedFundLockupPeriod: null,
+    expectedSubscriptionMultiple: null,
+    expectedHearingDate: null,
+    expectedFundraisingSize: null,
+    sourceUrl: "https://example.test/uisee.pdf",
+    lastUpdated: "2026-05-12T00:00:00.000Z",
+    notes: ["官方頁面資料", "部分欄位未公布"],
+  };
+
+  const enriched = enrichIpoFromText(
+    row,
+    "The Global Offering comprises a total of 14,461,200 Offer Shares. The Offer Price has been determined at HK$60.30 per H Share. Net proceeds are expected to be RMB1,735 million.",
+  );
+
+  assert.equal(enriched.expectedFundraisingSize, "HK$872 million");
+  assert.ok(enriched.notes.includes("募集規模按發售股數及發售價計算"));
+});
+
 test("parses active Application Proof JSON into IPO pipeline rows", () => {
   const rows = parseApplicationProofJson(
     {

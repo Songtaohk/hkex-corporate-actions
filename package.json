@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "update-data": "tsx scripts/update-data.js",
+    "update-data": "node --import tsx scripts/update-data.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

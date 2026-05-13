@@ -120,6 +120,9 @@ function toEnglishNotes(notes: string[]) {
     if (note.includes("募集規模按主板最低公眾市值")) {
       return "Fundraising size estimated from Main Board public market value floor";
     }
+    if (note.includes("募集規模按發售股數及發售價計算")) {
+      return "Fundraising size calculated from offer shares and offer price";
+    }
     if (note.includes("募集規模按近期")) {
       return "Fundraising size forecast from recent peer IPO median";
     }

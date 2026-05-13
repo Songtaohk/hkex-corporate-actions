@@ -28,6 +28,7 @@ import {
   applyPlacementEstimates,
   estimateDividendTotals,
   fetchSouthboundShareholding,
+  type IssuedSharesEstimate,
 } from "./estimates";
 
 const IPO_URL =
@@ -37,6 +38,7 @@ const IPO_GEM_URL =
 const DIVIDEND_URL = "https://www3.hkexnews.hk/reports/doe/eent.htm";
 const DIVIDEND_GEM_URL = "https://www3.hkexnews.hk/reports/doe/eentgem.htm";
 const TITLE_SEARCH_URL = "https://www1.hkexnews.hk/search/titlesearch.xhtml?lang=en";
+const STOCK_PREFIX_URL = "https://www1.hkexnews.hk/search/prefix.do";
 const AP_JSON_BASE = "https://www1.hkexnews.hk/ncms/json/eds/";
 const AP_ACTIVE_MAIN_URL = `${AP_JSON_BASE}appactive_app_sehk_e.json`;
 const AP_ACTIVE_PHIP_MAIN_URL = `${AP_JSON_BASE}appactive_appphip_sehk_e.json`;
@@ -160,10 +162,23 @@ export async function getDashboardData(forceRefresh = false) {
       ? parseDividendEvents(dividendGemHtml, DIVIDEND_GEM_URL, start, end)
       : []),
   ];
+  const mainlandDividends = filterMainlandBusinessDividends(
+    allDividends,
+    securities,
+  );
+  const dividendsWithSouthboundTotals = estimateDividendTotals(
+    mainlandDividends,
+    southboundShareholding,
+  );
+  const issuedSharesLookup = await fetchIssuedSharesForDividends(
+    dividendsWithSouthboundTotals,
+    sourceStatus,
+  );
   const dividends = dedupeDividendCounters(
     estimateDividendTotals(
-      filterMainlandBusinessDividends(allDividends, securities),
+      dividendsWithSouthboundTotals,
       southboundShareholding,
+      issuedSharesLookup,
     ),
   );
 
@@ -339,6 +354,192 @@ async function getPdfCandidates(seedUrl: string) {
   } catch {
     return [];
   }
+}
+
+async function fetchIssuedSharesForDividends(
+  dividends: DividendEvent[],
+  sourceStatus: SourceStatus[],
+) {
+  const lookup = new Map<string, IssuedSharesEstimate>();
+  const missing = Array.from(
+    new Map(
+      dividends
+        .filter((item) => !item.expectedTotalDividendAmount && item.dividendPerShare)
+        .map((item) => [normalizeDisclosureStockCode(item.stockCode), item]),
+    ).values(),
+  ).slice(0, 35);
+
+  let checked = 0;
+  for (const dividend of missing) {
+    const stockCode = normalizeDisclosureStockCode(dividend.stockCode);
+    const candidates = await getIssuedSharesDocumentCandidates(stockCode);
+    checked += 1;
+
+    for (const candidate of candidates.slice(0, 3)) {
+      try {
+        const text = await extractPdfTextFromUrl(candidate.href, 8);
+        const issuedShares = parseIssuedSharesFromDisclosureText(text);
+        if (!issuedShares) continue;
+
+        lookup.set(stockCode, {
+          stockCode,
+          issuedShares,
+          source: candidate.source,
+          sourceUrl: candidate.href,
+        });
+        break;
+      } catch {
+        // Some HKEX PDFs are scanned or protected. Leave the row as not disclosed.
+      }
+    }
+  }
+
+  sourceStatus.push({
+    name: "HKEXnews 股本月報及翌日披露",
+    url: TITLE_SEARCH_URL,
+    ok: true,
+    message: "已為 " + checked + " 項缺少分紅總規模的分紅檢查股本公告；補足 " + lookup.size + " 項已發行股數。",
+  });
+
+  return lookup;
+}
+
+async function getIssuedSharesDocumentCandidates(stockCode: string) {
+  const stockId = await fetchHkexStockId(stockCode);
+  if (!stockId) return [];
+
+  const today = new Date();
+  const fromDate = new Date(today);
+  fromDate.setFullYear(fromDate.getFullYear() - 1);
+  const params = new URLSearchParams({
+    lang: "en",
+    market: "SEHK",
+    stockId,
+    documentType: "-1",
+    category: "0",
+    sortByOptions: "DateTime",
+    sortDir: "0",
+    fromDate: formatSearchDate(fromDate),
+    toDate: formatSearchDate(today),
+  });
+  const searchUrl = "https://www1.hkexnews.hk/search/titlesearch.xhtml?" + params.toString();
+
+  try {
+    const html = await fetch(searchUrl, {
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (compatible; HKEX Corporate Actions Dashboard)",
+        accept: "text/html,application/xhtml+xml",
+      },
+      cache: "no-store",
+    }).then((response) => (response.ok ? response.text() : ""));
+
+    return extractLinks(html, searchUrl)
+      .map((link) => {
+        const title = link.label + " " + link.context;
+        const isNextDay = /next day disclosure/i.test(title);
+        const isMonthly = /monthly return|return of equity issuer|movements in securities/i.test(title);
+        if (!isNextDay && !isMonthly) return null;
+        if (!link.href.toLowerCase().endsWith(".pdf")) return null;
+        return {
+          href: link.href,
+          source: isNextDay ? "next_day_disclosure" : "monthly_return",
+        } satisfies Pick<IssuedSharesEstimate, "source"> & { href: string };
+      })
+      .filter((item): item is Pick<IssuedSharesEstimate, "source"> & { href: string } =>
+        Boolean(item),
+      )
+      .slice(0, 8);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchHkexStockId(stockCode: string) {
+  const params = new URLSearchParams({
+    callback: "callback",
+    lang: "EN",
+    market: "SEHK",
+    name: stockCode.padStart(5, "0"),
+  });
+
+  try {
+    const text = await fetch(STOCK_PREFIX_URL + "?" + params.toString(), {
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (compatible; HKEX Corporate Actions Dashboard)",
+        accept: "application/javascript,text/plain,*/*",
+      },
+      cache: "no-store",
+    }).then((response) => (response.ok ? response.text() : ""));
+    return parseStockIdFromPrefixResponse(text, stockCode);
+  } catch {
+    return null;
+  }
+}
+
+function parseStockIdFromPrefixResponse(text: string, stockCode: string) {
+  const normalizedCode = stockCode.padStart(5, "0");
+  const objectMatches = text.match(/{[^{}]*(?:stockId|id|code)[^{}]*}/gi) ?? [];
+
+  for (const objectText of objectMatches) {
+    if (!objectText.includes(normalizedCode) && !objectText.includes(String(Number(stockCode)))) {
+      continue;
+    }
+    const stockId =
+      objectText.match(/"stockId"s*:s*"?([^",}]+)"?/i)?.[1] ??
+      objectText.match(/"id"s*:s*"?([^",}]+)"?/i)?.[1];
+    if (stockId) return stockId;
+  }
+
+  const loose = text.match(/"stockId"s*:s*"?([^",}]+)"?/i)?.[1];
+  return loose ?? null;
+}
+
+function parseIssuedSharesFromDisclosureText(text: string) {
+  const normalized = text.replace(/s+/g, " ");
+  const preferredPatterns = [
+    /Balance at close of (?:the )?month[^d]{0,180}([d,]{7,})/i,
+    /Total number of issued shares[^d]{0,220}([d,]{7,})/i,
+    /Number of issued shares[^d]{0,220}([d,]{7,})/i,
+    /Immediately after[^d]{0,220}([d,]{7,})/i,
+  ];
+
+  for (const pattern of preferredPatterns) {
+    const value = parseShareCount(pattern.exec(normalized)?.[1]);
+    if (value) return value;
+  }
+
+  const relevantBlocks = normalized.match(
+    /(?:issued shares|balance at close|monthly return|next day disclosure)[sS]{0,800}/gi,
+  ) ?? [];
+  const candidates = relevantBlocks
+    .flatMap((block) => [...block.matchAll(/([d,]{7,})/g)])
+    .map((match) => parseShareCount(match[1]))
+    .filter((value): value is number => Boolean(value));
+
+  return candidates.sort((a, b) => b - a)[0] ?? null;
+}
+
+function parseShareCount(value: string | undefined) {
+  if (!value) return null;
+  const count = Number(value.replace(/,/g, ""));
+  if (!Number.isFinite(count) || count < 1_000_000 || count > 10_000_000_000_000) {
+    return null;
+  }
+  return count;
+}
+
+function normalizeDisclosureStockCode(value: string) {
+  const normalized = String(Number(value.match(/d{1,5}/)?.[0] ?? value));
+  if (/^8d{4}$/.test(normalized)) return String(Number(normalized.slice(1)));
+  return normalized;
+}
+
+function formatSearchDate(date: Date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return day + "/" + month + "/" + date.getFullYear();
 }
 
 function dedupeDividendCounters(items: DividendEvent[]) {

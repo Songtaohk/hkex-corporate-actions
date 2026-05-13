@@ -24,6 +24,15 @@ export interface SouthboundShareholding {
 
 export type SouthboundShareholdingLookup = Map<string, SouthboundShareholding>;
 
+export interface IssuedSharesEstimate {
+  stockCode: string;
+  issuedShares: number;
+  source: "monthly_return" | "next_day_disclosure";
+  sourceUrl: string;
+}
+
+export type IssuedSharesLookup = Map<string, IssuedSharesEstimate>;
+
 export function addIpoEstimationSources(sourceStatus: SourceStatus[]) {
   sourceStatus.push(
     {
@@ -564,26 +573,63 @@ export function parseSouthboundShareholding(html: string) {
 export function estimateDividendTotals(
   dividends: DividendEvent[],
   shareholdings: SouthboundShareholdingLookup,
+  issuedSharesLookup: IssuedSharesLookup = new Map(),
 ) {
   return dividends.map((dividend) => {
     if (dividend.expectedTotalDividendAmount) return dividend;
 
     const perShare = parseDividendPerShare(dividend.dividendPerShare);
+    if (!perShare) return dividend;
+
     const shareholding = findShareholding(dividend.stockCode, shareholdings);
-    if (!perShare || !shareholding) return dividend;
+    if (shareholding) {
+      return withEstimatedDividendTotal(
+        dividend,
+        perShare,
+        shareholding.estimatedIssuedShares,
+        "股份數參考：HKEX 港股通持股佔已發行股份比例",
+      );
+    }
 
-    const total = perShare.amount * shareholding.estimatedIssuedShares;
-    const notes = new Set(dividend.notes);
-    notes.delete("分紅總規模未公布");
-    notes.add("按每股分紅預測");
-    notes.add("股份數參考：HKEX 港股通持股佔已發行股份比例");
+    const issuedShares = findIssuedShares(dividend.stockCode, issuedSharesLookup);
+    if (!issuedShares) return dividend;
 
-    return {
-      ...dividend,
-      expectedTotalDividendAmount: formatMoney(perShare.currency, total),
-      notes: Array.from(notes),
-    };
+    const sourceLabel =
+      issuedShares.source === "next_day_disclosure"
+        ? "股份數參考：HKEXnews Next Day Disclosure Return"
+        : "股份數參考：HKEXnews Monthly Return";
+
+    return withEstimatedDividendTotal(
+      dividend,
+      perShare,
+      issuedShares.issuedShares,
+      sourceLabel,
+      issuedShares.sourceUrl,
+    );
   });
+}
+
+function withEstimatedDividendTotal(
+  dividend: DividendEvent,
+  perShare: { currency: string; amount: number },
+  issuedShares: number,
+  shareSourceNote: string,
+  sourceUrl?: string,
+) {
+  const total = perShare.amount * issuedShares;
+  if (!Number.isFinite(total) || total <= 0) return dividend;
+
+  const notes = new Set(dividend.notes);
+  notes.delete("分紅總規模未公布");
+  notes.add("按每股分紅預測");
+  notes.add(shareSourceNote);
+  if (sourceUrl) notes.add("股本資料來源：" + sourceUrl);
+
+  return {
+    ...dividend,
+    expectedTotalDividendAmount: formatMoney(perShare.currency, total),
+    notes: Array.from(notes),
+  };
 }
 
 function extractLatestPostingDate(notes: string[]) {
@@ -628,6 +674,21 @@ function findShareholding(
 
   if (/^8\d{4}$/.test(normalized)) {
     return shareholdings.get(String(Number(normalized.slice(1))));
+  }
+
+  return undefined;
+}
+
+function findIssuedShares(
+  stockCode: string,
+  issuedSharesLookup: IssuedSharesLookup,
+) {
+  const normalized = normalizeStockCode(stockCode);
+  const direct = issuedSharesLookup.get(normalized);
+  if (direct) return direct;
+
+  if (/^8\d{4}$/.test(normalized)) {
+    return issuedSharesLookup.get(String(Number(normalized.slice(1))));
   }
 
   return undefined;

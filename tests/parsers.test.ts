@@ -346,6 +346,44 @@ test("estimates dividend totals from dividend per share and HKEX shareholding pe
   assert.ok(!estimated.notes.includes("分紅總規模未公布"));
 });
 
+
+test("estimates dividend totals from HKEXnews issued shares disclosure when southbound data is unavailable", () => {
+  const [estimated] = estimateDividendTotals(
+    [
+      {
+        id: "dividend-2",
+        kind: "dividend",
+        companyName: "TEST CHINA CO",
+        stockCode: "1234",
+        expectedDividendDate: "2026-06-01",
+        expectedTotalDividendAmount: null,
+        dividendPerShare: "RMB0.30",
+        sourceUrl: "https://example.test",
+        lastUpdated: "2026-05-10T00:00:00.000Z",
+        notes: ["官方分紅及權益表", "分紅總規模未公布"],
+      },
+    ],
+    new Map(),
+    new Map([
+      [
+        "1234",
+        {
+          stockCode: "1234",
+          issuedShares: 1_000_000_000,
+          source: "monthly_return",
+          sourceUrl: "https://example.test/monthly-return.pdf",
+        },
+      ],
+    ]),
+  );
+
+  assert.equal(estimated.expectedTotalDividendAmount, "RMB 300.00 million");
+  assert.ok(estimated.notes.includes("按每股分紅預測"));
+  assert.ok(estimated.notes.includes("股份數參考：HKEXnews Monthly Return"));
+  assert.ok(estimated.notes.includes("股本資料來源：https://example.test/monthly-return.pdf"));
+  assert.ok(!estimated.notes.includes("分紅總規模未公布"));
+});
+
 test("parses rights issue entries from entitlement table into placements", () => {
   const html = `
     <html><body>

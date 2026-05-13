@@ -99,6 +99,15 @@ function toEnglishNotes(notes: string[]) {
     if (note.includes("按每股分紅預測")) {
       return "Estimated from dividend per share";
     }
+    if (note.includes("股份數參考：HKEXnews Monthly Return")) {
+      return "Issued shares referenced from HKEXnews Monthly Return";
+    }
+    if (note.includes("股份數參考：HKEXnews Next Day Disclosure Return")) {
+      return "Issued shares referenced from HKEXnews Next Day Disclosure Return";
+    }
+    if (note.includes("股本資料來源：")) {
+      return note.replace("股本資料來源：", "Issued share source: ");
+    }
     if (note.includes("股份數參考")) {
       return "Issued shares referenced from HKEX Southbound shareholding percentage";
     }

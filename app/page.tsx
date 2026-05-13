@@ -53,6 +53,11 @@ const dividendSortOptions: Array<{ key: DividendSortKey; label: string }> = [
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const refreshEndpoint = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT || "";
+const refreshPendingMessage =
+  "已提交後台刷新，資料生成及發布通常需要數分鐘。同一 IP 24 小時內只能刷新一次。";
+const refreshUpdatedMessage = "現在資料已更新，你在24小時之內無法再請求刷新資料。";
+const refreshPollIntervalMs = 10_000;
+const refreshPollAttempts = 30;
 
 function staticAssetPath(path: string) {
   return `${basePath}${path}`;
@@ -82,6 +87,25 @@ function hasEstimate(item: UiCorporateAction) {
   return item.notes.some((note) => note.includes("估算") || note.includes("推測"));
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchLatestSnapshot() {
+  const response = await fetch(`${staticAssetPath("/data/latest.json")}?t=${Date.now()}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`靜態資料回應 ${response.status}`);
+  }
+  return (await response.json()) as DashboardResponse;
+}
+
+function isNewerSnapshot(nextGeneratedAt: string, previousGeneratedAt: string | null) {
+  if (!previousGeneratedAt) return true;
+  return new Date(nextGeneratedAt).getTime() > new Date(previousGeneratedAt).getTime();
+}
+
 export default function Home() {
   const [active, setActive] = useState<CorporateActionKind>("ipo");
   const [query, setQuery] = useState("");
@@ -102,13 +126,7 @@ export default function Home() {
     setRefreshing(force);
     setLoading((previous) => previous || !force);
     try {
-      const response = await fetch(`${staticAssetPath("/data/latest.json")}?t=${Date.now()}`, {
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        throw new Error(`靜態資料回應 ${response.status}`);
-      }
-      const json = (await response.json()) as DashboardResponse;
+      const json = await fetchLatestSnapshot();
       setData(json);
       setLastRefreshAt(new Date());
     } catch (err) {
@@ -123,15 +141,34 @@ export default function Home() {
     void loadData(false);
   }, [loadData]);
 
+  const waitForUpdatedData = useCallback(async (previousGeneratedAt: string | null) => {
+    for (let attempt = 0; attempt < refreshPollAttempts; attempt += 1) {
+      await wait(refreshPollIntervalMs);
+      const latest = await fetchLatestSnapshot();
+      setData(latest);
+      setLastRefreshAt(new Date());
+
+      if (isNewerSnapshot(latest.generatedAt, previousGeneratedAt)) {
+        setRefreshMessage(refreshUpdatedMessage);
+        return;
+      }
+    }
+
+    setRefreshMessage(
+      "已提交後台刷新，資料仍在生成或發布中；請稍後再重新載入資料。",
+    );
+  }, []);
+
   const handleRefresh = useCallback(async () => {
     setRefreshMessage(null);
 
     if (!refreshEndpoint) {
       await loadData(true);
-      setRefreshMessage("已重新載入最新已發布資料。");
+      setRefreshMessage("已重新載入最新已發布資料。若需要重新抓取官方資料，請使用公開網站的後台刷新。");
       return;
     }
 
+    const previousGeneratedAt = data?.generatedAt ?? null;
     setError(null);
     setRefreshing(true);
     try {
@@ -159,14 +196,14 @@ export default function Home() {
         throw new Error(result.message || `刷新請求失敗 ${response.status}`);
       }
 
-      setRefreshMessage("已提交後台刷新，資料生成及發布通常需要數分鐘。");
-      await loadData(false);
+      setRefreshMessage(refreshPendingMessage);
+      await waitForUpdatedData(previousGeneratedAt);
     } catch (err) {
       setError(err instanceof Error ? err.message : "無法提交刷新請求");
     } finally {
       setRefreshing(false);
     }
-  }, [loadData]);
+  }, [data?.generatedAt, loadData, waitForUpdatedData]);
 
   const rows = useMemo(() => {
     if (!data) return [];

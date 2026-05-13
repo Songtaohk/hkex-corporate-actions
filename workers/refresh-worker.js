@@ -118,7 +118,7 @@ const refreshWorker = {
 
     return json(
       {
-        message: "已提交後台刷新，資料生成及發布通常需要數分鐘。",
+        message: "已提交後台刷新，資料生成及發布通常需要數分鐘。同一 IP 24 小時內只能刷新一次。",
         nextAllowedAt,
       },
       { status: 202 },

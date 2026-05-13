@@ -137,8 +137,6 @@ export default function Home() {
     try {
       const response = await fetch(refreshEndpoint, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "refresh" }),
       });
       const result = (await response.json().catch(() => ({}))) as {
         message?: string;

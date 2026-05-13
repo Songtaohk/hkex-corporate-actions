@@ -8,6 +8,7 @@ function json(payload, init = {}, origin = "*") {
       "access-control-allow-origin": origin,
       "access-control-allow-methods": "POST, OPTIONS",
       "access-control-allow-headers": "content-type",
+      "access-control-max-age": "86400",
       "cache-control": "no-store",
       ...(init.headers || {}),
     },
@@ -22,10 +23,8 @@ function getClientIp(request) {
   );
 }
 
-function getAllowedOrigin(request, env) {
-  const requestOrigin = request.headers.get("origin") || "*";
-  if (!env.ALLOWED_ORIGIN) return requestOrigin;
-  return requestOrigin === env.ALLOWED_ORIGIN ? requestOrigin : env.ALLOWED_ORIGIN;
+function getAllowedOrigin(request) {
+  return request.headers.get("origin") || "*";
 }
 
 async function dispatchGithubWorkflow(env) {
@@ -64,7 +63,15 @@ const refreshWorker = {
     const origin = getAllowedOrigin(request, env);
 
     if (request.method === "OPTIONS") {
-      return json({}, { status: 204 }, origin);
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "access-control-allow-origin": origin,
+          "access-control-allow-methods": "POST, OPTIONS",
+          "access-control-allow-headers": "content-type",
+          "access-control-max-age": "86400",
+        },
+      });
     }
 
     if (request.method !== "POST") {

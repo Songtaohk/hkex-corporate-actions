@@ -367,7 +367,7 @@ async function fetchIssuedSharesForDividends(
         .filter((item) => !item.expectedTotalDividendAmount && item.dividendPerShare)
         .map((item) => [normalizeDisclosureStockCode(item.stockCode), item]),
     ).values(),
-  ).slice(0, 35);
+  );
 
   let checked = 0;
   for (const dividend of missing) {

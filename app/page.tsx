@@ -52,6 +52,7 @@ const dividendSortOptions: Array<{ key: DividendSortKey; label: string }> = [
 ];
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+const refreshEndpoint = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT || "";
 
 function staticAssetPath(path: string) {
   return `${basePath}${path}`;
@@ -87,6 +88,7 @@ export default function Home() {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ipoSort, setIpoSort] = useState<IpoSortKey>("listingDate");
@@ -119,6 +121,53 @@ export default function Home() {
 
   useEffect(() => {
     void loadData(false);
+  }, [loadData]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshMessage(null);
+
+    if (!refreshEndpoint) {
+      await loadData(true);
+      setRefreshMessage("已重新載入最新已發布資料。");
+      return;
+    }
+
+    setError(null);
+    setRefreshing(true);
+    try {
+      const response = await fetch(refreshEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "refresh" }),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        nextAllowedAt?: string;
+      };
+
+      if (response.status === 429) {
+        setRefreshMessage(
+          result.nextAllowedAt
+            ? `此 IP 於 24 小時內已刷新過。下次可刷新時間：${formatMinute(
+                new Date(result.nextAllowedAt),
+              )}。`
+            : "此 IP 於 24 小時內已刷新過，請稍後再試。",
+        );
+        await loadData(false);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(result.message || `刷新請求失敗 ${response.status}`);
+      }
+
+      setRefreshMessage("已提交後台刷新，資料生成及發布通常需要數分鐘。");
+      await loadData(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "無法提交刷新請求");
+    } finally {
+      setRefreshing(false);
+    }
   }, [loadData]);
 
   const rows = useMemo(() => {
@@ -164,12 +213,15 @@ export default function Home() {
           </p>
         </div>
         <div className={styles.actions}>
-          <div className={styles.contact}>聯繫：songtaozhang@gmail.com</div>
+          <div className={styles.contact}>
+            聯繫：
+            <a href="mailto:songtaozhang@gmail.com">songtaozhang@gmail.com</a>
+          </div>
           <button
             className={styles.secondaryButton}
-            onClick={() => void loadData(true)}
+            onClick={() => void handleRefresh()}
             disabled={refreshing}
-            title="重新讀取靜態資料"
+            title={refreshEndpoint ? "提交後台資料刷新" : "重新讀取靜態資料"}
           >
             <RefreshCw size={18} className={refreshing ? styles.spin : ""} />
             刷新
@@ -228,6 +280,13 @@ export default function Home() {
         <div className={styles.notice} role="alert">
           <AlertCircle size={20} />
           <span>{error}</span>
+        </div>
+      ) : null}
+
+      {refreshMessage ? (
+        <div className={styles.notice} role="status">
+          <RefreshCw size={20} />
+          <span>{refreshMessage}</span>
         </div>
       ) : null}
 

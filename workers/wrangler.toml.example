@@ -1,0 +1,15 @@
+name = "hkex-refresh-worker"
+main = "refresh-worker.js"
+compatibility_date = "2026-05-13"
+
+[vars]
+GITHUB_OWNER = "Songtaohk"
+GITHUB_REPO = "hkex-corporate-actions"
+GITHUB_WORKFLOW = "deploy-pages.yml"
+GITHUB_REF = "main"
+ALLOWED_ORIGIN = "https://songtaohk.github.io"
+
+# Create with: wrangler kv namespace create REFRESH_LIMITS
+[[kv_namespaces]]
+binding = "REFRESH_LIMITS"
+id = "replace-with-kv-namespace-id"

@@ -56,6 +56,7 @@ const refreshEndpoint = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT || "";
 const refreshPendingMessage =
   "已提交後台刷新，資料生成及發布通常需要數分鐘。同一 IP 24 小時內只能刷新一次。";
 const refreshUpdatedMessage = "現在資料已更新，你在24小時之內無法再請求刷新資料。";
+const refreshNoUpdateMessage = "數據刷新失敗，或數據/估算沒有變化。本次不做更新。";
 const refreshPollIntervalMs = 10_000;
 const refreshPollAttempts = 30;
 
@@ -106,6 +107,10 @@ function isNewerSnapshot(nextGeneratedAt: string, previousGeneratedAt: string | 
   return new Date(nextGeneratedAt).getTime() > new Date(previousGeneratedAt).getTime();
 }
 
+function didRefreshProduceNoUpdate(snapshot: DashboardResponse) {
+  return snapshot.refreshStatus === "preserved" || snapshot.refreshStatus === "unchanged";
+}
+
 export default function Home() {
   const [active, setActive] = useState<CorporateActionKind>("ipo");
   const [query, setQuery] = useState("");
@@ -149,7 +154,9 @@ export default function Home() {
       setLastRefreshAt(new Date());
 
       if (isNewerSnapshot(latest.generatedAt, previousGeneratedAt)) {
-        setRefreshMessage(refreshUpdatedMessage);
+        setRefreshMessage(
+          didRefreshProduceNoUpdate(latest) ? refreshNoUpdateMessage : refreshUpdatedMessage,
+        );
         return;
       }
     }

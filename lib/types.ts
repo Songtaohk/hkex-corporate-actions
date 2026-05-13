@@ -38,8 +38,11 @@ export interface DividendEvent extends BaseCorporateAction {
 
 export type UiCorporateAction = IpoEvent | PlacementEvent | DividendEvent;
 
+export type RefreshStatus = "updated" | "preserved" | "unchanged";
+
 export interface DashboardResponse {
   generatedAt: string;
+  refreshStatus?: RefreshStatus;
   rangeStart: string;
   rangeEnd: string;
   sourceStatus: SourceStatus[];

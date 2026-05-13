@@ -12,7 +12,7 @@ const xlsxPath = resolve(dataDir, "latest.xlsx");
 await mkdir(dataDir, { recursive: true });
 
 const fetchedData = await getDashboardData(true);
-const data = await preserveExistingRowsWhenFetchFails(fetchedData);
+const data = await annotateRefreshStatus(fetchedData);
 const workbook = await buildExcelWorkbook(data);
 
 await writeFile(jsonPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
@@ -24,26 +24,55 @@ console.log(
   `Rows: IPO ${data.ipo.length}, placements ${data.placements.length}, dividends ${data.dividends.length}`,
 );
 
-async function preserveExistingRowsWhenFetchFails(data) {
+async function annotateRefreshStatus(data) {
   const rowCount = data.ipo.length + data.placements.length + data.dividends.length;
-  if (rowCount > 0) return data;
-
   const existingData = await readExistingData();
   const existingRowCount = existingData
     ? existingData.ipo.length + existingData.placements.length + existingData.dividends.length
     : 0;
 
-  if (existingRowCount === 0) return data;
+  if (rowCount === 0 && existingRowCount > 0) {
+    console.warn(
+      `Official sources returned 0 rows; preserved existing static rows and refreshed metadata for ${existingRowCount} rows.`,
+    );
 
-  console.warn(
-    `Official sources returned 0 rows; preserved existing static rows and refreshed metadata for ${existingRowCount} rows.`,
-  );
+    return {
+      ...existingData,
+      generatedAt: data.generatedAt,
+      refreshStatus: "preserved",
+      sourceStatus: data.sourceStatus,
+    };
+  }
+
+  if (existingData && rowCount > 0 && hasSameRows(data, existingData)) {
+    return {
+      ...data,
+      refreshStatus: "unchanged",
+    };
+  }
 
   return {
-    ...existingData,
-    generatedAt: data.generatedAt,
-    sourceStatus: data.sourceStatus,
+    ...data,
+    refreshStatus: "updated",
   };
+}
+
+function hasSameRows(nextData, previousData) {
+  return stableRowsJson(nextData) === stableRowsJson(previousData);
+}
+
+function stableRowsJson(data) {
+  return JSON.stringify({
+    ipo: data.ipo.map(normalizeAction),
+    placements: data.placements.map(normalizeAction),
+    dividends: data.dividends.map(normalizeAction),
+  });
+}
+
+function normalizeAction(item) {
+  const rest = { ...item };
+  delete rest.lastUpdated;
+  return rest;
 }
 async function readExistingData() {
   try {

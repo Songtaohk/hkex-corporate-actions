@@ -96,6 +96,18 @@ function toEnglishNotes(notes: string[]) {
     if (note.includes("派息日按記錄日後8個工作日推算")) {
       return "Payment date estimated as 8 business days after record date";
     }
+    if (note.includes("股本公告查詢：未能在HKEXnews匹配股票代號")) {
+      return "Issued-share lookup failed: stock code not matched on HKEXnews";
+    }
+    if (note.includes("股本公告查詢：未找到月報、翌日披露、分紅公告、年報或中報PDF")) {
+      return "Issued-share lookup failed: no Monthly Return, Next Day Disclosure Return, dividend announcement, annual report, or interim report PDF found";
+    }
+    if (note.includes("股本公告查詢：PDF文字未能抽取")) {
+      return "Issued-share lookup failed: PDF text could not be extracted";
+    }
+    if (note.includes("股本公告查詢：未能從月報、翌日披露、分紅公告、年報或中報抽取已發行股數")) {
+      return "Issued-share lookup failed: issued shares could not be extracted from official HKEXnews documents";
+    }
     if (note.includes("按每股分紅預測")) {
       return "Estimated from dividend per share";
     }
@@ -104,6 +116,15 @@ function toEnglishNotes(notes: string[]) {
     }
     if (note.includes("股份數參考：HKEXnews Next Day Disclosure Return")) {
       return "Issued shares referenced from HKEXnews Next Day Disclosure Return";
+    }
+    if (note.includes("股份數參考：HKEXnews 分紅公告")) {
+      return "Issued shares referenced from HKEXnews dividend announcement";
+    }
+    if (note.includes("股份數參考：HKEXnews 年報")) {
+      return "Issued shares referenced from HKEXnews annual report";
+    }
+    if (note.includes("股份數參考：HKEXnews 中期報告")) {
+      return "Issued shares referenced from HKEXnews interim report";
     }
     if (note.includes("股本資料來源：")) {
       return note.replace("股本資料來源：", "Issued share source: ");

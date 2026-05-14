@@ -170,15 +170,19 @@ export async function getDashboardData(forceRefresh = false) {
     mainlandDividends,
     southboundShareholding,
   );
-  const issuedSharesLookup = await fetchIssuedSharesForDividends(
+  const issuedSharesResult = await fetchIssuedSharesForDividends(
     dividendsWithSouthboundTotals,
     sourceStatus,
   );
+  const dividendsWithDisclosureNotes = addIssuedSharesDiagnostics(
+    dividendsWithSouthboundTotals,
+    issuedSharesResult.diagnostics,
+  );
   const dividends = dedupeDividendCounters(
     estimateDividendTotals(
-      dividendsWithSouthboundTotals,
+      dividendsWithDisclosureNotes,
       southboundShareholding,
-      issuedSharesLookup,
+      issuedSharesResult.lookup,
     ),
   );
 
@@ -361,6 +365,7 @@ async function fetchIssuedSharesForDividends(
   sourceStatus: SourceStatus[],
 ) {
   const lookup = new Map<string, IssuedSharesEstimate>();
+  const diagnostics = new Map<string, string>();
   const missing = Array.from(
     new Map(
       dividends
@@ -372,13 +377,27 @@ async function fetchIssuedSharesForDividends(
   let checked = 0;
   for (const dividend of missing) {
     const stockCode = normalizeDisclosureStockCode(dividend.stockCode);
-    const candidates = await getIssuedSharesDocumentCandidates(stockCode);
+    const result = await getIssuedSharesDocumentCandidates(stockCode);
     checked += 1;
 
-    for (const candidate of candidates.slice(0, 3)) {
+    if (!result.stockId) {
+      diagnostics.set(stockCode, "股本公告查詢：未能在HKEXnews匹配股票代號");
+      continue;
+    }
+
+    if (result.candidates.length === 0) {
+      diagnostics.set(
+        stockCode,
+        "股本公告查詢：未找到月報、翌日披露、分紅公告、年報或中報PDF",
+      );
+      continue;
+    }
+
+    let hadPdfTextFailure = false;
+    for (const candidate of result.candidates.slice(0, 8)) {
       try {
-        const text = await extractPdfTextFromUrl(candidate.href, 8);
-        const issuedShares = parseIssuedSharesFromDisclosureText(text);
+        const text = await extractPdfTextFromUrl(candidate.href, candidate.firstPages);
+        const issuedShares = parseIssuedSharesFromDisclosureText(text, candidate.source);
         if (!issuedShares) continue;
 
         lookup.set(stockCode, {
@@ -387,30 +406,54 @@ async function fetchIssuedSharesForDividends(
           source: candidate.source,
           sourceUrl: candidate.href,
         });
+        diagnostics.delete(stockCode);
         break;
       } catch {
-        // Some HKEX PDFs are scanned or protected. Leave the row as not disclosed.
+        hadPdfTextFailure = true;
       }
+    }
+
+    if (!lookup.has(stockCode)) {
+      diagnostics.set(
+        stockCode,
+        hadPdfTextFailure
+          ? "股本公告查詢：PDF文字未能抽取"
+          : "股本公告查詢：未能從月報、翌日披露、分紅公告、年報或中報抽取已發行股數",
+      );
     }
   }
 
+  const reasonCounts = Array.from(diagnostics.values()).reduce(
+    (counts, reason) => counts.set(reason, (counts.get(reason) ?? 0) + 1),
+    new Map<string, number>(),
+  );
+  const reasonSummary = Array.from(reasonCounts)
+    .map(([reason, count]) => reason + " " + count + " 項")
+    .join("；");
+
   sourceStatus.push({
-    name: "HKEXnews 股本月報及翌日披露",
+    name: "HKEXnews 股本補充資料",
     url: TITLE_SEARCH_URL,
     ok: true,
-    message: "已為 " + checked + " 項缺少分紅總規模的分紅檢查股本公告；補足 " + lookup.size + " 項已發行股數。",
+    message:
+      "已為 " +
+      checked +
+      " 項缺少分紅總規模的分紅檢查股本資料；補足 " +
+      lookup.size +
+      " 項已發行股數" +
+      (reasonSummary ? "；" + reasonSummary : "。"),
   });
 
-  return lookup;
+  return { lookup, diagnostics };
 }
 
 async function getIssuedSharesDocumentCandidates(stockCode: string) {
   const stockId = await fetchHkexStockId(stockCode);
-  if (!stockId) return [];
+  if (!stockId) return { stockId: null, candidates: [] };
 
   const today = new Date();
   const fromDate = new Date(today);
-  fromDate.setFullYear(fromDate.getFullYear() - 1);
+  fromDate.setFullYear(fromDate.getFullYear() - 2);
   const params = new URLSearchParams({
     lang: "en",
     market: "SEHK",
@@ -434,25 +477,75 @@ async function getIssuedSharesDocumentCandidates(stockCode: string) {
       cache: "no-store",
     }).then((response) => (response.ok ? response.text() : ""));
 
-    return extractLinks(html, searchUrl)
-      .map((link) => {
-        const title = link.label + " " + link.context;
-        const isNextDay = /next day disclosure/i.test(title);
-        const isMonthly = /monthly return|return of equity issuer|movements in securities/i.test(title);
-        if (!isNextDay && !isMonthly) return null;
-        if (!link.href.toLowerCase().endsWith(".pdf")) return null;
-        return {
-          href: link.href,
-          source: isNextDay ? "next_day_disclosure" : "monthly_return",
-        } satisfies Pick<IssuedSharesEstimate, "source"> & { href: string };
-      })
-      .filter((item): item is Pick<IssuedSharesEstimate, "source"> & { href: string } =>
-        Boolean(item),
-      )
-      .slice(0, 8);
+    const candidates = extractLinks(html, searchUrl)
+      .map((link) => classifyIssuedSharesCandidate(link))
+      .filter((item): item is IssuedSharesDocumentCandidate => Boolean(item))
+      .sort((a, b) => a.priority - b.priority)
+      .slice(0, 16);
+
+    return { stockId, candidates };
   } catch {
-    return [];
+    return { stockId, candidates: [] };
   }
+}
+
+type IssuedSharesDocumentCandidate = Pick<IssuedSharesEstimate, "source"> & {
+  href: string;
+  priority: number;
+  firstPages: number;
+};
+
+function classifyIssuedSharesCandidate(link: { href: string; label: string; context: string }) {
+  if (!link.href.toLowerCase().endsWith(".pdf")) return null;
+
+  const title = link.label + " " + link.context;
+  if (/next day disclosure/i.test(title)) {
+    return makeIssuedSharesCandidate(link.href, "next_day_disclosure", 1, 8);
+  }
+  if (/monthly return|return of equity issuer|movements in securities/i.test(title)) {
+    return makeIssuedSharesCandidate(link.href, "monthly_return", 2, 8);
+  }
+  if (/dividend|distribution|closure of register|book closure|payment date|record date/i.test(title)) {
+    return makeIssuedSharesCandidate(link.href, "dividend_announcement", 3, 12);
+  }
+  if (/interim report|half-year report|half year report/i.test(title)) {
+    return makeIssuedSharesCandidate(link.href, "interim_report", 4, 24);
+  }
+  if (/annual report|financial statements/i.test(title)) {
+    return makeIssuedSharesCandidate(link.href, "annual_report", 5, 32);
+  }
+
+  return null;
+}
+
+function makeIssuedSharesCandidate(
+  href: string,
+  source: IssuedSharesEstimate["source"],
+  priority: number,
+  firstPages: number,
+): IssuedSharesDocumentCandidate {
+  return { href, source, priority, firstPages };
+}
+
+function addIssuedSharesDiagnostics(
+  dividends: DividendEvent[],
+  diagnostics: Map<string, string>,
+) {
+  if (diagnostics.size === 0) return dividends;
+
+  return dividends.map((dividend) => {
+    if (dividend.expectedTotalDividendAmount || !dividend.dividendPerShare) {
+      return dividend;
+    }
+
+    const reason = diagnostics.get(normalizeDisclosureStockCode(dividend.stockCode));
+    if (!reason) return dividend;
+
+    return {
+      ...dividend,
+      notes: Array.from(new Set([...dividend.notes, reason])),
+    };
+  });
 }
 
 async function fetchHkexStockId(stockCode: string) {
@@ -480,29 +573,34 @@ async function fetchHkexStockId(stockCode: string) {
 
 function parseStockIdFromPrefixResponse(text: string, stockCode: string) {
   const normalizedCode = stockCode.padStart(5, "0");
-  const objectMatches = text.match(/{[^{}]*(?:stockId|id|code)[^{}]*}/gi) ?? [];
+  const objectMatches = text.match(/\{[^{}]*(?:stockId|id|code)[^{}]*\}/gi) ?? [];
 
   for (const objectText of objectMatches) {
     if (!objectText.includes(normalizedCode) && !objectText.includes(String(Number(stockCode)))) {
       continue;
     }
     const stockId =
-      objectText.match(/"stockId"s*:s*"?([^",}]+)"?/i)?.[1] ??
-      objectText.match(/"id"s*:s*"?([^",}]+)"?/i)?.[1];
+      objectText.match(/"stockId"\s*:\s*"?([^",}]+)"?/i)?.[1] ??
+      objectText.match(/"id"\s*:\s*"?([^",}]+)"?/i)?.[1];
     if (stockId) return stockId;
   }
 
-  const loose = text.match(/"stockId"s*:s*"?([^",}]+)"?/i)?.[1];
+  const loose = text.match(/"stockId"\s*:\s*"?([^",}]+)"?/i)?.[1];
   return loose ?? null;
 }
 
-function parseIssuedSharesFromDisclosureText(text: string) {
-  const normalized = text.replace(/s+/g, " ");
+function parseIssuedSharesFromDisclosureText(
+  text: string,
+  source: IssuedSharesEstimate["source"],
+) {
+  const normalized = text.replace(/\s+/g, " ");
   const preferredPatterns = [
-    /Balance at close of (?:the )?month[^d]{0,180}([d,]{7,})/i,
-    /Total number of issued shares[^d]{0,220}([d,]{7,})/i,
-    /Number of issued shares[^d]{0,220}([d,]{7,})/i,
-    /Immediately after[^d]{0,220}([d,]{7,})/i,
+    /Balance at close of (?:the )?month[^\d]{0,220}([\d,]{7,})/i,
+    /Total number of issued shares[^\d]{0,260}([\d,]{7,})/i,
+    /Number of issued shares[^\d]{0,260}([\d,]{7,})/i,
+    /Immediately after[^\d]{0,260}([\d,]{7,})/i,
+    /Shares in issue[^\d]{0,260}([\d,]{7,})/i,
+    /Issued share capital[^\d]{0,260}([\d,]{7,})/i,
   ];
 
   for (const pattern of preferredPatterns) {
@@ -510,15 +608,36 @@ function parseIssuedSharesFromDisclosureText(text: string) {
     if (value) return value;
   }
 
+  if (source === "annual_report" || source === "interim_report") {
+    const reportValue = parseIssuedSharesFromReportText(normalized);
+    if (reportValue) return reportValue;
+  }
+
   const relevantBlocks = normalized.match(
-    /(?:issued shares|balance at close|monthly return|next day disclosure)[sS]{0,800}/gi,
+    /(?:issued shares|shares in issue|share capital|balance at close|monthly return|next day disclosure)[\s\S]{0,1000}/gi,
   ) ?? [];
   const candidates = relevantBlocks
-    .flatMap((block) => [...block.matchAll(/([d,]{7,})/g)])
+    .flatMap((block) => [...block.matchAll(/\b([\d,]{7,})\b/g)])
     .map((match) => parseShareCount(match[1]))
     .filter((value): value is number => Boolean(value));
 
   return candidates.sort((a, b) => b - a)[0] ?? null;
+}
+
+function parseIssuedSharesFromReportText(text: string) {
+  const reportPatterns = [
+    /issued and fully paid[\s\S]{0,500}?([\d,]{7,})\s+(?:ordinary\s+)?shares/i,
+    /([\d,]{7,})\s+(?:ordinary\s+)?shares[\s\S]{0,120}?(?:in issue|issued and fully paid)/i,
+    /share capital[\s\S]{0,1000}?([\d,]{7,})\s+(?:ordinary\s+)?shares/i,
+    /total issued shares[\s\S]{0,300}?([\d,]{7,})/i,
+  ];
+
+  for (const pattern of reportPatterns) {
+    const value = parseShareCount(pattern.exec(text)?.[1]);
+    if (value) return value;
+  }
+
+  return null;
 }
 
 function parseShareCount(value: string | undefined) {
@@ -531,8 +650,8 @@ function parseShareCount(value: string | undefined) {
 }
 
 function normalizeDisclosureStockCode(value: string) {
-  const normalized = String(Number(value.match(/d{1,5}/)?.[0] ?? value));
-  if (/^8d{4}$/.test(normalized)) return String(Number(normalized.slice(1)));
+  const normalized = String(Number(value.match(/\d{1,5}/)?.[0] ?? value));
+  if (/^8\d{4}$/.test(normalized)) return String(Number(normalized.slice(1)));
   return normalized;
 }
 

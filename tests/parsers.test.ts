@@ -384,6 +384,42 @@ test("estimates dividend totals from HKEXnews issued shares disclosure when sout
   assert.ok(!estimated.notes.includes("分紅總規模未公布"));
 });
 
+
+test("estimates dividend totals from HKEXnews annual report share count fallback", () => {
+  const [estimated] = estimateDividendTotals(
+    [
+      {
+        id: "dividend-annual-report",
+        kind: "dividend",
+        companyName: "TEST CHINA CO",
+        stockCode: "1234",
+        expectedDividendDate: "2026-06-01",
+        expectedTotalDividendAmount: null,
+        dividendPerShare: "RMB0.30",
+        sourceUrl: "https://example.test",
+        lastUpdated: "2026-05-10T00:00:00.000Z",
+        notes: ["官方分紅及權益表", "分紅總規模未公布"],
+      },
+    ],
+    new Map(),
+    new Map([
+      [
+        "1234",
+        {
+          stockCode: "1234",
+          issuedShares: 2_000_000_000,
+          source: "annual_report",
+          sourceUrl: "https://example.test/annual-report.pdf",
+        },
+      ],
+    ]),
+  );
+
+  assert.equal(estimated.expectedTotalDividendAmount, "RMB 600.00 million");
+  assert.ok(estimated.notes.includes("股份數參考：HKEXnews 年報"));
+  assert.ok(estimated.notes.includes("股本資料來源：https://example.test/annual-report.pdf"));
+});
+
 test("parses rights issue entries from entitlement table into placements", () => {
   const html = `
     <html><body>

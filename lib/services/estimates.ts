@@ -27,7 +27,12 @@ export type SouthboundShareholdingLookup = Map<string, SouthboundShareholding>;
 export interface IssuedSharesEstimate {
   stockCode: string;
   issuedShares: number;
-  source: "monthly_return" | "next_day_disclosure";
+  source:
+    | "monthly_return"
+    | "next_day_disclosure"
+    | "dividend_announcement"
+    | "annual_report"
+    | "interim_report";
   sourceUrl: string;
 }
 
@@ -594,10 +599,7 @@ export function estimateDividendTotals(
     const issuedShares = findIssuedShares(dividend.stockCode, issuedSharesLookup);
     if (!issuedShares) return dividend;
 
-    const sourceLabel =
-      issuedShares.source === "next_day_disclosure"
-        ? "股份數參考：HKEXnews Next Day Disclosure Return"
-        : "股份數參考：HKEXnews Monthly Return";
+    const sourceLabel = getIssuedSharesSourceLabel(issuedShares.source);
 
     return withEstimatedDividendTotal(
       dividend,
@@ -607,6 +609,22 @@ export function estimateDividendTotals(
       issuedShares.sourceUrl,
     );
   });
+}
+
+function getIssuedSharesSourceLabel(source: IssuedSharesEstimate["source"]) {
+  if (source === "next_day_disclosure") {
+    return "股份數參考：HKEXnews Next Day Disclosure Return";
+  }
+  if (source === "dividend_announcement") {
+    return "股份數參考：HKEXnews 分紅公告";
+  }
+  if (source === "annual_report") {
+    return "股份數參考：HKEXnews 年報";
+  }
+  if (source === "interim_report") {
+    return "股份數參考：HKEXnews 中期報告";
+  }
+  return "股份數參考：HKEXnews Monthly Return";
 }
 
 function withEstimatedDividendTotal(

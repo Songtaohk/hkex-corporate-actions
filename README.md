@@ -33,12 +33,12 @@ npm run build
 
 ## 可選：用戶觸發後台刷新
 
-純 GitHub Pages 不能在用戶點擊時執行 `npm run update-data`，也不能按 IP 做 24 小時限制。若需要「用戶點擊刷新 -> 重新抓官方資料 -> 重新估算 -> 重新發布」，需要加一個小型後台。
+純 GitHub Pages 不能在用戶點擊時執行 `npm run update-data`，也不能按 IP 做 12 小時限制。若需要「用戶點擊刷新 -> 重新抓官方資料 -> 重新估算 -> 重新發布」，需要加一個小型後台。
 
 本專案提供 Cloudflare Worker 範例：`workers/refresh-worker.js`。它會：
 
 - 讀取訪問者 IP。
-- 用 Cloudflare KV 記錄刷新時間，限制每個 IP 24 小時只能刷新一次。
+- 用 Cloudflare KV 記錄刷新時間，限制每個 IP 12 小時只能刷新一次。
 - 觸發 GitHub Actions 的 `deploy-pages.yml`。
 - 不在前端暴露 GitHub token。
 
@@ -52,7 +52,7 @@ npm run build
 6. 在 GitHub repository `Settings -> Secrets and variables -> Actions -> Variables` 新增 `NEXT_PUBLIC_REFRESH_ENDPOINT`，值為 Worker URL。
 7. 重新執行 GitHub Actions 部署。
 
-配置後，頁面「刷新」會提交後台刷新請求；若同一 IP 24 小時內已刷新過，頁面會顯示下一次可刷新時間。
+配置後，頁面「刷新」會提交後台刷新請求；若同一 IP 12 小時內已刷新過，頁面會顯示下一次可刷新時間。
 
 ## GitHub Pages 發布
 

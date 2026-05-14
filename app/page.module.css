@@ -41,6 +41,35 @@
 .sortBox,
 .tableHeaderActions,
 .rangeBadge,
+.languageToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 42px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--muted);
+}
+
+.languageButton,
+.activeLanguage {
+  min-width: 38px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.activeLanguage {
+  background: var(--primary);
+  color: white;
+}
+
 .sourceLink {
   display: flex;
   align-items: center;
@@ -379,7 +408,8 @@
   }
 
   .primaryButton,
-  .secondaryButton {
+  .secondaryButton,
+  .languageToggle {
     justify-content: center;
     flex: 1 1 160px;
   }

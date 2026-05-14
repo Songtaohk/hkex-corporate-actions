@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Download,
   ExternalLink,
+  Languages,
   RefreshCw,
   Search,
 } from "lucide-react";
@@ -22,41 +23,265 @@ import type {
 type IpoSortKey = "listingDate" | "hearingDate" | "fundraisingSize";
 type PlacementSortKey = "listingDate" | "fundraisingSize";
 type DividendSortKey = "dividendDate" | "totalAmount";
+type Language = "zh" | "en";
 
-const tabs: Array<{ key: CorporateActionKind; label: string }> = [
-  { key: "ipo", label: "IPO" },
-  { key: "placement", label: "增發" },
-  { key: "dividend", label: "中資分紅" },
-];
-
-const kindLabels: Record<CorporateActionKind, string> = {
-  ipo: "IPO",
-  placement: "增發",
-  dividend: "中資分紅",
+type IpoTableLabels = {
+  company: string;
+  code: string;
+  listingDate: string;
+  lockup: string;
+  multiple: string;
+  hearing: string;
+  fundraising: string;
+  notes: string;
+  source: string;
 };
 
-const ipoSortOptions: Array<{ key: IpoSortKey; label: string }> = [
-  { key: "listingDate", label: "按預計上市時間" },
-  { key: "hearingDate", label: "按聆訊時間" },
-  { key: "fundraisingSize", label: "按募集規模由大到小" },
-];
+type PlacementTableLabels = {
+  company: string;
+  code: string;
+  listingDate: string;
+  lockup: string;
+  multiple: string;
+  fundraising: string;
+  notes: string;
+  source: string;
+};
 
-const placementSortOptions: Array<{ key: PlacementSortKey; label: string }> = [
-  { key: "listingDate", label: "按上市時間" },
-  { key: "fundraisingSize", label: "按募集規模由大到小" },
-];
+type DividendTableLabels = {
+  company: string;
+  code: string;
+  paymentDate: string;
+  totalAmount: string;
+  perShare: string;
+  notes: string;
+  source: string;
+};
 
-const dividendSortOptions: Array<{ key: DividendSortKey; label: string }> = [
-  { key: "dividendDate", label: "按派息日" },
-  { key: "totalAmount", label: "按分紅總規模由大到小" },
-];
+type UiText = {
+  pageLanguageLabel: string;
+  zhButton: string;
+  enButton: string;
+  tabs: Record<CorporateActionKind, string>;
+  ipoSortOptions: Array<{ key: IpoSortKey; label: string }>;
+  placementSortOptions: Array<{ key: PlacementSortKey; label: string }>;
+  dividendSortOptions: Array<{ key: DividendSortKey; label: string }>;
+  officialKicker: string;
+  title: string;
+  subtitle: string;
+  contact: string;
+  refresh: string;
+  refreshTitleRemote: string;
+  refreshTitleStatic: string;
+  downloadExcel: string;
+  lastUpdated: string;
+  refreshTime: string;
+  summaryAria: string;
+  searchPlaceholder: string;
+  sort: string;
+  futureThreeMonths: string;
+  tableIntro: (visible: number, total: number, active: CorporateActionKind) => string;
+  loading: string;
+  empty: string;
+  source: string;
+  notDisclosed: string;
+  refreshPending: string;
+  refreshUpdated: string;
+  refreshNoUpdate: string;
+  refreshStillRunning: string;
+  refreshStaticReloaded: string;
+  refreshRateLimited: (date?: Date) => string;
+  refreshRequestFailed: (status: number) => string;
+  refreshSubmitFailed: string;
+  loadFailed: string;
+  ipoTable: IpoTableLabels;
+  placementTable: PlacementTableLabels;
+  dividendTable: DividendTableLabels;
+};
+
+const uiText: Record<Language, UiText> = {
+  zh: {
+    pageLanguageLabel: "語言",
+    zhButton: "繁",
+    enButton: "EN",
+    tabs: { ipo: "IPO", placement: "增發", dividend: "中資分紅" },
+    ipoSortOptions: [
+      { key: "listingDate", label: "按預計上市時間" },
+      { key: "hearingDate", label: "按聆訊時間" },
+      { key: "fundraisingSize", label: "按募集規模由大到小" },
+    ],
+    placementSortOptions: [
+      { key: "listingDate", label: "按上市時間" },
+      { key: "fundraisingSize", label: "按募集規模由大到小" },
+    ],
+    dividendSortOptions: [
+      { key: "dividendDate", label: "按派息日" },
+      { key: "totalAmount", label: "按分紅總規模由大到小" },
+    ],
+    officialKicker: "官方公開資料 · 未來三個月",
+    title: "香港上市公司事項查詢",
+    subtitle:
+      "讀取後台已生成的港交所 IPO、增發及中資分紅資料快照；IPO 包含已刊發招股書及仍在申請階段的 AP/PHIP 公司，中資分紅只顯示中國內地主營業務公司。",
+    contact: "聯繫：",
+    refresh: "刷新",
+    refreshTitleRemote: "提交後台資料刷新",
+    refreshTitleStatic: "重新讀取靜態資料",
+    downloadExcel: "下載 Excel",
+    lastUpdated: "最後更新",
+    refreshTime: "刷新時間",
+    summaryAria: "資料摘要",
+    searchPlaceholder: "搜尋公司名稱或代號",
+    sort: "排序",
+    futureThreeMonths: "未來三個月",
+    tableIntro: (visible, total, active) =>
+      "顯示 " +
+      visible +
+      " 筆；全部事項 " +
+      total +
+      " 筆。" +
+      (active === "dividend" ? "中資分紅已按中國內地主營業務篩選。" : "") +
+      "未公布及估算值會以標籤標示。",
+    loading: "正在載入官方資料...",
+    empty: "目前沒有符合條件的資料。",
+    source: "來源",
+    notDisclosed: "未公布",
+    refreshPending: "已提交後台刷新，資料生成及發布通常需要數分鐘。同一 IP 12 小時內只能刷新一次。",
+    refreshUpdated: "現在資料已更新，你在12小時之內無法再請求刷新資料。",
+    refreshNoUpdate: "數據刷新失敗，或數據/估算沒有變化。本次不做更新。",
+    refreshStillRunning: "已提交後台刷新，資料仍在生成或發布中；請稍後再重新載入資料。",
+    refreshStaticReloaded: "已重新載入最新已發布資料。若需要重新抓取官方資料，請使用公開網站的後台刷新。",
+    refreshRateLimited: (date) =>
+      date
+        ? "此 IP 於 12 小時內已刷新過。下次可刷新時間：" + formatMinute(date, "zh") + "。"
+        : "此 IP 於 12 小時內已刷新過，請稍後再試。",
+    refreshRequestFailed: (status) => "刷新請求失敗 " + status,
+    refreshSubmitFailed: "無法提交刷新請求",
+    loadFailed: "無法載入資料",
+    ipoTable: {
+      company: "公司名稱",
+      code: "代號",
+      listingDate: "預計上市時間",
+      lockup: "募集資金凍結時間",
+      multiple: "募集倍數",
+      hearing: "聆訊時間",
+      fundraising: "募集規模",
+      notes: "備註",
+      source: "來源",
+    },
+    placementTable: {
+      company: "公司名稱",
+      code: "代號",
+      listingDate: "新股上市時間",
+      lockup: "募集資金凍結時間",
+      multiple: "募集倍數",
+      fundraising: "募集規模",
+      notes: "備註",
+      source: "來源",
+    },
+    dividendTable: {
+      company: "公司名稱",
+      code: "代號",
+      paymentDate: "預計派息日",
+      totalAmount: "分紅總規模",
+      perShare: "每股分紅",
+      notes: "備註",
+      source: "來源",
+    },
+  },
+  en: {
+    pageLanguageLabel: "Language",
+    zhButton: "繁",
+    enButton: "EN",
+    tabs: { ipo: "IPO", placement: "Placements", dividend: "China Dividends" },
+    ipoSortOptions: [
+      { key: "listingDate", label: "Expected listing date" },
+      { key: "hearingDate", label: "Hearing date" },
+      { key: "fundraisingSize", label: "Fundraising size high to low" },
+    ],
+    placementSortOptions: [
+      { key: "listingDate", label: "Listing date" },
+      { key: "fundraisingSize", label: "Fundraising size high to low" },
+    ],
+    dividendSortOptions: [
+      { key: "dividendDate", label: "Payment date" },
+      { key: "totalAmount", label: "Total dividend amount high to low" },
+    ],
+    officialKicker: "Official public data · Next three months",
+    title: "Hong Kong Listed Company Events",
+    subtitle:
+      "Reads the latest generated HKEX IPO, placement and China dividend snapshot. IPO includes published prospectuses and AP/PHIP applicants still in the pipeline. China dividends only show companies with Mainland China principal business.",
+    contact: "Contact: ",
+    refresh: "Refresh",
+    refreshTitleRemote: "Submit background data refresh",
+    refreshTitleStatic: "Reload static data",
+    downloadExcel: "Download Excel",
+    lastUpdated: "Last Updated",
+    refreshTime: "Refresh Time",
+    summaryAria: "Data summary",
+    searchPlaceholder: "Search company name or code",
+    sort: "Sort",
+    futureThreeMonths: "Next three months",
+    tableIntro: (visible, total, active) =>
+      "Showing " +
+      visible +
+      "; total events " +
+      total +
+      ". " +
+      (active === "dividend"
+        ? "China dividends are filtered by Mainland China principal business. "
+        : "") +
+      "Undisclosed and estimated values are shown with tags.",
+    loading: "Loading official data...",
+    empty: "No matching data.",
+    source: "Source",
+    notDisclosed: "Not disclosed",
+    refreshPending: "Background refresh submitted. Data generation and publishing usually take a few minutes. The same IP can refresh once every 12 hours.",
+    refreshUpdated: "Data is now updated. You cannot request another refresh within 12 hours.",
+    refreshNoUpdate: "Data refresh failed, or data/estimates did not change. No update was made.",
+    refreshStillRunning: "Background refresh was submitted and data is still generating or publishing. Please reload later.",
+    refreshStaticReloaded: "Latest published data reloaded. To fetch official data again, use the public site's background refresh.",
+    refreshRateLimited: (date) =>
+      date
+        ? "This IP has refreshed within the last 12 hours. Next refresh time: " + formatMinute(date, "en") + "."
+        : "This IP has refreshed within the last 12 hours. Please try again later.",
+    refreshRequestFailed: (status) => "Refresh request failed " + status,
+    refreshSubmitFailed: "Unable to submit refresh request",
+    loadFailed: "Unable to load data",
+    ipoTable: {
+      company: "Company Name",
+      code: "Code",
+      listingDate: "Expected Listing Date",
+      lockup: "Fund Lock-up Period",
+      multiple: "Subscription Multiple",
+      hearing: "Hearing Date",
+      fundraising: "Fundraising Size",
+      notes: "Notes",
+      source: "Source",
+    },
+    placementTable: {
+      company: "Company Name",
+      code: "Code",
+      listingDate: "New Shares Listing Date",
+      lockup: "Fund Lock-up Period",
+      multiple: "Subscription Multiple",
+      fundraising: "Fundraising Size",
+      notes: "Notes",
+      source: "Source",
+    },
+    dividendTable: {
+      company: "Company Name",
+      code: "Code",
+      paymentDate: "Expected Payment Date",
+      totalAmount: "Total Dividend Amount",
+      perShare: "Dividend per Share",
+      notes: "Notes",
+      source: "Source",
+    },
+  },
+};
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 const refreshEndpoint = process.env.NEXT_PUBLIC_REFRESH_ENDPOINT || "";
-const refreshPendingMessage =
-  "已提交後台刷新，資料生成及發布通常需要數分鐘。同一 IP 24 小時內只能刷新一次。";
-const refreshUpdatedMessage = "現在資料已更新，你在24小時之內無法再請求刷新資料。";
-const refreshNoUpdateMessage = "數據刷新失敗，或數據/估算沒有變化。本次不做更新。";
 const refreshPollIntervalMs = 10_000;
 const refreshPollAttempts = 30;
 
@@ -64,8 +289,8 @@ function staticAssetPath(path: string) {
   return `${basePath}${path}`;
 }
 
-function formatMinute(value: Date) {
-  return value.toLocaleString("zh-HK", {
+function formatMinute(value: Date, language: Language) {
+  return value.toLocaleString(language === "en" ? "en-HK" : "zh-HK", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -75,12 +300,15 @@ function formatMinute(value: Date) {
   });
 }
 
-function toDateLabel(value: string | null) {
-  return value || "未公布";
+function toDateLabel(value: string | null, missingLabel: string) {
+  return value || missingLabel;
 }
 
-function showValue(value: string | number | null | undefined) {
-  if (value === null || value === undefined || value === "") return "未公布";
+function showValue(
+  value: string | number | null | undefined,
+  missingLabel: string,
+) {
+  if (value === null || value === undefined || value === "") return missingLabel;
   return String(value);
 }
 
@@ -112,6 +340,7 @@ function didRefreshProduceNoUpdate(snapshot: DashboardResponse) {
 }
 
 export default function Home() {
+  const [language, setLanguage] = useState<Language>("zh");
   const [active, setActive] = useState<CorporateActionKind>("ipo");
   const [query, setQuery] = useState("");
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -126,6 +355,20 @@ export default function Home() {
   const [dividendSort, setDividendSort] =
     useState<DividendSortKey>("dividendDate");
 
+  const t = uiText[language];
+
+  useEffect(() => {
+    const storedLanguage = window.localStorage.getItem("hkex-dashboard-language");
+    if (storedLanguage === "zh" || storedLanguage === "en") {
+      setLanguage(storedLanguage);
+    }
+  }, []);
+
+  const setPreferredLanguage = useCallback((nextLanguage: Language) => {
+    setLanguage(nextLanguage);
+    window.localStorage.setItem("hkex-dashboard-language", nextLanguage);
+  }, []);
+
   const loadData = useCallback(async (force = false) => {
     setError(null);
     setRefreshing(force);
@@ -135,12 +378,12 @@ export default function Home() {
       setData(json);
       setLastRefreshAt(new Date());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "無法載入資料");
+      setError(err instanceof Error ? err.message : t.loadFailed);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t.loadFailed]);
 
   useEffect(() => {
     void loadData(false);
@@ -155,23 +398,23 @@ export default function Home() {
 
       if (isNewerSnapshot(latest.generatedAt, previousGeneratedAt)) {
         setRefreshMessage(
-          didRefreshProduceNoUpdate(latest) ? refreshNoUpdateMessage : refreshUpdatedMessage,
+          didRefreshProduceNoUpdate(latest) ? t.refreshNoUpdate : t.refreshUpdated,
         );
         return;
       }
     }
 
     setRefreshMessage(
-      "已提交後台刷新，資料仍在生成或發布中；請稍後再重新載入資料。",
+      t.refreshStillRunning,
     );
-  }, []);
+  }, [t.refreshNoUpdate, t.refreshStillRunning, t.refreshUpdated]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshMessage(null);
 
     if (!refreshEndpoint) {
       await loadData(true);
-      setRefreshMessage("已重新載入最新已發布資料。若需要重新抓取官方資料，請使用公開網站的後台刷新。");
+      setRefreshMessage(t.refreshStaticReloaded);
       return;
     }
 
@@ -188,29 +431,23 @@ export default function Home() {
       };
 
       if (response.status === 429) {
-        setRefreshMessage(
-          result.nextAllowedAt
-            ? `此 IP 於 24 小時內已刷新過。下次可刷新時間：${formatMinute(
-                new Date(result.nextAllowedAt),
-              )}。`
-            : "此 IP 於 24 小時內已刷新過，請稍後再試。",
-        );
+        setRefreshMessage(t.refreshRateLimited(result.nextAllowedAt ? new Date(result.nextAllowedAt) : undefined));
         await loadData(false);
         return;
       }
 
       if (!response.ok) {
-        throw new Error(result.message || `刷新請求失敗 ${response.status}`);
+        throw new Error(result.message || t.refreshRequestFailed(response.status));
       }
 
-      setRefreshMessage(refreshPendingMessage);
+      setRefreshMessage(t.refreshPending);
       await waitForUpdatedData(previousGeneratedAt);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "無法提交刷新請求");
+      setError(err instanceof Error ? err.message : t.refreshSubmitFailed);
     } finally {
       setRefreshing(false);
     }
-  }, [data?.generatedAt, loadData, waitForUpdatedData]);
+  }, [data?.generatedAt, loadData, t, waitForUpdatedData]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -248,25 +485,42 @@ export default function Home() {
     <main className={styles.shell}>
       <section className={styles.header}>
         <div>
-          <p className={styles.kicker}>官方公開資料 · 未來三個月</p>
-          <h1>香港上市公司事項查詢</h1>
-          <p className={styles.subtitle}>
-            讀取後台已生成的港交所 IPO、增發及中資分紅資料快照；IPO 包含已刊發招股書及仍在申請階段的 AP/PHIP 公司，中資分紅只顯示中國內地主營業務公司。
-          </p>
+          <p className={styles.kicker}>{t.officialKicker}</p>
+          <h1>{t.title}</h1>
+          <p className={styles.subtitle}>{t.subtitle}</p>
         </div>
         <div className={styles.actions}>
           <div className={styles.contact}>
-            聯繫：
+            {t.contact}
             <a href="mailto:songtaozhang@gmail.com">songtaozhang@gmail.com</a>
+          </div>
+          <div className={styles.languageToggle} aria-label={t.pageLanguageLabel}>
+            <Languages size={16} />
+            <button
+              type="button"
+              className={language === "zh" ? styles.activeLanguage : styles.languageButton}
+              onClick={() => setPreferredLanguage("zh")}
+              aria-pressed={language === "zh"}
+            >
+              {t.zhButton}
+            </button>
+            <button
+              type="button"
+              className={language === "en" ? styles.activeLanguage : styles.languageButton}
+              onClick={() => setPreferredLanguage("en")}
+              aria-pressed={language === "en"}
+            >
+              {t.enButton}
+            </button>
           </div>
           <button
             className={styles.secondaryButton}
             onClick={() => void handleRefresh()}
             disabled={refreshing}
-            title={refreshEndpoint ? "提交後台資料刷新" : "重新讀取靜態資料"}
+            title={refreshEndpoint ? t.refreshTitleRemote : t.refreshTitleStatic}
           >
             <RefreshCw size={18} className={refreshing ? styles.spin : ""} />
-            刷新
+            {t.refresh}
           </button>
           <a
             className={styles.primaryButton}
@@ -274,28 +528,30 @@ export default function Home() {
             download="hk-corp-actions-latest.xlsx"
           >
             <Download size={18} />
-            下載 Excel
+            {t.downloadExcel}
           </a>
         </div>
       </section>
 
-      <section className={styles.summaryGrid} aria-label="資料摘要">
-        <SummaryCard label="IPO" value={data?.ipo.length ?? 0} />
-        <SummaryCard label="增發" value={data?.placements.length ?? 0} />
-        <SummaryCard label="中資分紅" value={data?.dividends.length ?? 0} />
+      <section className={styles.summaryGrid} aria-label={t.summaryAria}>
+        <SummaryCard label={t.tabs.ipo} value={data?.ipo.length ?? 0} />
+        <SummaryCard label={t.tabs.placement} value={data?.placements.length ?? 0} />
+        <SummaryCard label={t.tabs.dividend} value={data?.dividends.length ?? 0} />
         <SummaryCard
-          label="最後更新"
-          value={data ? formatMinute(new Date(data.generatedAt)) : "--"}
+          label={t.lastUpdated}
+          value={data ? formatMinute(new Date(data.generatedAt), language) : "--"}
         />
         <SummaryCard
-          label="刷新時間"
-          value={lastRefreshAt ? formatMinute(lastRefreshAt) : "--"}
+          label={t.refreshTime}
+          value={lastRefreshAt ? formatMinute(lastRefreshAt, language) : "--"}
         />
       </section>
 
       <section className={styles.controls}>
-        <div className={styles.tabs} role="tablist" aria-label="事項類型">
-          {tabs.map((tab) => (
+        <div className={styles.tabs} role="tablist" aria-label={t.pageLanguageLabel === "Language" ? "Event type" : "事項類型"}>
+          {Object.entries(t.tabs).map(([key, label]) => {
+            const tab = { key: key as CorporateActionKind, label };
+            return (
             <button
               key={tab.key}
               role="tab"
@@ -305,15 +561,16 @@ export default function Home() {
             >
               {tab.label}
             </button>
-          ))}
+          );
+          })}
         </div>
         <label className={styles.searchBox}>
           <Search size={18} />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜尋公司名稱或代號"
-            aria-label="搜尋公司名稱或代號"
+            placeholder={t.searchPlaceholder}
+            aria-label={t.searchPlaceholder}
           />
         </label>
       </section>
@@ -335,53 +592,51 @@ export default function Home() {
       <section className={styles.tablePanel}>
         <div className={styles.tableHeader}>
           <div>
-            <h2>{kindLabels[active]}</h2>
-            <p>
-              顯示 {rows.length} 筆；全部事項 {totalCount} 筆。{active === "dividend" ? "中資分紅已按中國內地主營業務篩選。" : ""}未公布及估算值會以標籤標示。
-            </p>
+            <h2>{t.tabs[active]}</h2>
+            <p>{t.tableIntro(rows.length, totalCount, active)}</p>
           </div>
           <div className={styles.tableHeaderActions}>
             {active === "ipo" ? (
               <SortSelect
-                label="排序"
+                label={t.sort}
                 value={ipoSort}
-                options={ipoSortOptions}
+                options={t.ipoSortOptions}
                 onChange={(value) => setIpoSort(value as IpoSortKey)}
               />
             ) : active === "placement" ? (
               <SortSelect
-                label="排序"
+                label={t.sort}
                 value={placementSort}
-                options={placementSortOptions}
+                options={t.placementSortOptions}
                 onChange={(value) => setPlacementSort(value as PlacementSortKey)}
               />
             ) : active === "dividend" ? (
               <SortSelect
-                label="排序"
+                label={t.sort}
                 value={dividendSort}
-                options={dividendSortOptions}
+                options={t.dividendSortOptions}
                 onChange={(value) => setDividendSort(value as DividendSortKey)}
               />
             ) : null}
             <div className={styles.rangeBadge}>
               <CalendarDays size={16} />
-              未來三個月
+              {t.futureThreeMonths}
             </div>
           </div>
         </div>
 
         {loading ? (
-          <div className={styles.emptyState}>正在載入官方資料...</div>
+          <div className={styles.emptyState}>{t.loading}</div>
         ) : rows.length === 0 ? (
-          <div className={styles.emptyState}>目前沒有符合條件的資料。</div>
+          <div className={styles.emptyState}>{t.empty}</div>
         ) : (
           <div className={styles.tableScroll}>
             {active === "ipo" ? (
-              <IpoTable rows={rows as IpoEvent[]} />
+              <IpoTable rows={rows as IpoEvent[]} labels={t.ipoTable} sourceLabel={t.source} missingLabel={t.notDisclosed} />
             ) : active === "placement" ? (
-              <PlacementTable rows={rows as PlacementEvent[]} />
+              <PlacementTable rows={rows as PlacementEvent[]} labels={t.placementTable} sourceLabel={t.source} missingLabel={t.notDisclosed} />
             ) : (
-              <DividendTable rows={rows as DividendEvent[]} />
+              <DividendTable rows={rows as DividendEvent[]} labels={t.dividendTable} sourceLabel={t.source} missingLabel={t.notDisclosed} />
             )}
           </div>
         )}
@@ -518,10 +773,10 @@ function amountRank(value: string | null) {
   return number * unitMultiplier * currencyMultiplier;
 }
 
-function SourceLink({ url }: { url: string }) {
+function SourceLink({ url, label }: { url: string; label: string }) {
   return (
     <a className={styles.sourceLink} href={url} target="_blank" rel="noreferrer">
-      來源
+      {label}
       <ExternalLink size={14} />
     </a>
   );
@@ -547,20 +802,30 @@ function Notes({ item }: { item: UiCorporateAction }) {
   );
 }
 
-function IpoTable({ rows }: { rows: IpoEvent[] }) {
+function IpoTable({
+  rows,
+  labels,
+  sourceLabel,
+  missingLabel,
+}: {
+  rows: IpoEvent[];
+  labels: IpoTableLabels;
+  sourceLabel: string;
+  missingLabel: string;
+}) {
   return (
     <table className={styles.table}>
       <thead>
         <tr>
-          <th>公司名稱</th>
-          <th>代號</th>
-          <th>預計上市時間</th>
-          <th>募集資金凍結時間</th>
-          <th>募集倍數</th>
-          <th>聆訊時間</th>
-          <th>募集規模</th>
-          <th>備註</th>
-          <th>來源</th>
+          <th>{labels.company}</th>
+          <th>{labels.code}</th>
+          <th>{labels.listingDate}</th>
+          <th>{labels.lockup}</th>
+          <th>{labels.multiple}</th>
+          <th>{labels.hearing}</th>
+          <th>{labels.fundraising}</th>
+          <th>{labels.notes}</th>
+          <th>{labels.source}</th>
         </tr>
       </thead>
       <tbody>
@@ -568,16 +833,16 @@ function IpoTable({ rows }: { rows: IpoEvent[] }) {
           <tr key={row.id} className={hasEstimate(row) ? styles.estimatedRow : ""}>
             <td>{row.companyName}</td>
             <td>{row.stockCode}</td>
-            <td>{toDateLabel(row.expectedListingDate)}</td>
-            <td>{showValue(row.expectedFundLockupPeriod)}</td>
-            <td>{showValue(row.expectedSubscriptionMultiple)}</td>
-            <td>{toDateLabel(row.expectedHearingDate)}</td>
-            <td>{showValue(row.expectedFundraisingSize)}</td>
+            <td>{toDateLabel(row.expectedListingDate, missingLabel)}</td>
+            <td>{showValue(row.expectedFundLockupPeriod, missingLabel)}</td>
+            <td>{showValue(row.expectedSubscriptionMultiple, missingLabel)}</td>
+            <td>{toDateLabel(row.expectedHearingDate, missingLabel)}</td>
+            <td>{showValue(row.expectedFundraisingSize, missingLabel)}</td>
             <td>
               <Notes item={row} />
             </td>
             <td>
-              <SourceLink url={row.sourceUrl} />
+              <SourceLink url={row.sourceUrl} label={sourceLabel} />
             </td>
           </tr>
         ))}
@@ -586,19 +851,29 @@ function IpoTable({ rows }: { rows: IpoEvent[] }) {
   );
 }
 
-function PlacementTable({ rows }: { rows: PlacementEvent[] }) {
+function PlacementTable({
+  rows,
+  labels,
+  sourceLabel,
+  missingLabel,
+}: {
+  rows: PlacementEvent[];
+  labels: PlacementTableLabels;
+  sourceLabel: string;
+  missingLabel: string;
+}) {
   return (
     <table className={styles.table}>
       <thead>
         <tr>
-          <th>公司名稱</th>
-          <th>代號</th>
-          <th>新股上市時間</th>
-          <th>募集資金凍結時間</th>
-          <th>募集倍數</th>
-          <th>募集規模</th>
-          <th>備註</th>
-          <th>來源</th>
+          <th>{labels.company}</th>
+          <th>{labels.code}</th>
+          <th>{labels.listingDate}</th>
+          <th>{labels.lockup}</th>
+          <th>{labels.multiple}</th>
+          <th>{labels.fundraising}</th>
+          <th>{labels.notes}</th>
+          <th>{labels.source}</th>
         </tr>
       </thead>
       <tbody>
@@ -606,15 +881,15 @@ function PlacementTable({ rows }: { rows: PlacementEvent[] }) {
           <tr key={row.id} className={hasEstimate(row) ? styles.estimatedRow : ""}>
             <td>{row.companyName}</td>
             <td>{row.stockCode}</td>
-            <td>{toDateLabel(row.expectedNewSharesListingDate)}</td>
-            <td>{showValue(row.expectedFundLockupPeriod)}</td>
-            <td>{showValue(row.expectedSubscriptionMultiple)}</td>
-            <td>{showValue(row.expectedFundraisingSize)}</td>
+            <td>{toDateLabel(row.expectedNewSharesListingDate, missingLabel)}</td>
+            <td>{showValue(row.expectedFundLockupPeriod, missingLabel)}</td>
+            <td>{showValue(row.expectedSubscriptionMultiple, missingLabel)}</td>
+            <td>{showValue(row.expectedFundraisingSize, missingLabel)}</td>
             <td>
               <Notes item={row} />
             </td>
             <td>
-              <SourceLink url={row.sourceUrl} />
+              <SourceLink url={row.sourceUrl} label={sourceLabel} />
             </td>
           </tr>
         ))}
@@ -623,18 +898,28 @@ function PlacementTable({ rows }: { rows: PlacementEvent[] }) {
   );
 }
 
-function DividendTable({ rows }: { rows: DividendEvent[] }) {
+function DividendTable({
+  rows,
+  labels,
+  sourceLabel,
+  missingLabel,
+}: {
+  rows: DividendEvent[];
+  labels: DividendTableLabels;
+  sourceLabel: string;
+  missingLabel: string;
+}) {
   return (
     <table className={styles.table}>
       <thead>
         <tr>
-          <th>公司名稱</th>
-          <th>代號</th>
-          <th>預計派息日</th>
-          <th>分紅總規模</th>
-          <th>每股分紅</th>
-          <th>備註</th>
-          <th>來源</th>
+          <th>{labels.company}</th>
+          <th>{labels.code}</th>
+          <th>{labels.paymentDate}</th>
+          <th>{labels.totalAmount}</th>
+          <th>{labels.perShare}</th>
+          <th>{labels.notes}</th>
+          <th>{labels.source}</th>
         </tr>
       </thead>
       <tbody>
@@ -642,14 +927,14 @@ function DividendTable({ rows }: { rows: DividendEvent[] }) {
           <tr key={row.id} className={hasEstimate(row) ? styles.estimatedRow : ""}>
             <td>{row.companyName}</td>
             <td>{row.stockCode}</td>
-            <td>{toDateLabel(row.expectedDividendDate)}</td>
-            <td>{showValue(row.expectedTotalDividendAmount)}</td>
-            <td>{showValue(row.dividendPerShare)}</td>
+            <td>{toDateLabel(row.expectedDividendDate, missingLabel)}</td>
+            <td>{showValue(row.expectedTotalDividendAmount, missingLabel)}</td>
+            <td>{showValue(row.dividendPerShare, missingLabel)}</td>
             <td>
               <Notes item={row} />
             </td>
             <td>
-              <SourceLink url={row.sourceUrl} />
+              <SourceLink url={row.sourceUrl} label={sourceLabel} />
             </td>
           </tr>
         ))}

@@ -304,14 +304,7 @@ export function parseDividendEvents(
         /((?:FINAL|INTERIM|SPECIAL|MONTHLY|QUARTERLY)?\s*(?:DIVIDEND|DISTRIBUTION)[^。.;]*?(?:HKD|RMB|USD|US\$|HK\$)\s*[\d.]+[^。.;]*?PER\s+(?:10\s+)?SHARES?)/gi,
       ),
     ];
-    const fullDateMatches = [...blockText.matchAll(/\b(\d{2}\/\d{2}\/20\d{2})\b/g)];
-    const shortDateMatches =
-      fullDateMatches.length > 0
-        ? []
-        : [...blockText.matchAll(/\b(\d{2}\/\d{2})(?!\/)\b/g)];
-    const normalizedDates = [...fullDateMatches, ...shortDateMatches]
-      .map((match) => normalizeDoeDate(match[1], entry.reportYear))
-      .filter((value): value is string => Boolean(value));
+    const normalizedDates = extractDoeEventDates(blockText, entry.reportYear);
     const dividendDate = estimateDividendPaymentDate(
       blockText,
       normalizedDates,
@@ -366,6 +359,26 @@ function formatPerShareAmount(value: number) {
   return value.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
 }
 
+function extractDoeEventDates(blockText: string, reportYear: number) {
+  const fullDateMatches = [...blockText.matchAll(/\b(\d{2}\/\d{2}\/20\d{2})\b/g)];
+  const shortDateMatches = [...blockText.matchAll(/\b(\d{2}\/\d{2})(?!\/)\b/g)];
+
+  return [...fullDateMatches, ...shortDateMatches]
+    .filter((match) => !isAccountingPeriodDate(blockText, match.index ?? 0))
+    .map((match) => ({
+      index: match.index ?? 0,
+      date: normalizeDoeDate(match[1], reportYear),
+    }))
+    .filter((item): item is { index: number; date: string } => Boolean(item.date))
+    .sort((a, b) => a.index - b.index)
+    .map((item) => item.date);
+}
+
+function isAccountingPeriodDate(text: string, index: number) {
+  const before = text.slice(Math.max(0, index - 48), index).toUpperCase();
+  return /(Y\.E\.|YEAR ENDED|PERIOD ENDED|MONTHS ENDED|ENDED)\s*$/.test(before);
+}
+
 function estimateDividendPaymentDate(
   blockText: string,
   normalizedDates: string[],
@@ -403,14 +416,7 @@ export function parsePlacementEntitlements(
       continue;
     }
 
-    const fullDateMatches = [...entry.blockText.matchAll(/\b(\d{2}\/\d{2}\/20\d{2})\b/g)];
-    const shortDateMatches =
-      fullDateMatches.length > 0
-        ? []
-        : [...entry.blockText.matchAll(/\b(\d{2}\/\d{2})(?!\/)\b/g)];
-    const dates = [...fullDateMatches, ...shortDateMatches]
-      .map((match) => normalizeDoeDate(match[1], entry.reportYear))
-      .filter((value): value is string => Boolean(value));
+    const dates = extractDoeEventDates(entry.blockText, entry.reportYear);
 
     const lastDate = dates.at(-1) ?? null;
     const expectedNewSharesListingDate =

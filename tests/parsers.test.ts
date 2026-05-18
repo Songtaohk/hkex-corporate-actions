@@ -204,6 +204,37 @@ test("normalizes dividend amounts declared per 10 shares", () => {
   assert.equal(rows[0].dividendPerShare, "RMB0.125");
 });
 
+
+test("ignores accounting period dates when estimating dividend payment date", () => {
+  const html = `
+    <html><body>
+      Date : 18/05/2026
+      <br />TENCENT
+      <br />(700)
+      <br />FINAL DIVIDEND
+      <br />HKD5.30 PER SHARE
+      <br />(Y.E. 31/12/2025)
+      <br />15/05 19/05/2026 - 20/05/2026
+      <br />NIL INTERIM (SEMI-ANNUAL) DIVIDEND
+      <br />(FOR THE THREE MONTHS ENDED 31/03/2026)
+      <br />(Y.E. 31/12/2026)
+      <br />NO B/C DATE
+    </body></html>
+  `;
+
+  const rows = parseDividendEvents(
+    html,
+    "https://www3.hkexnews.hk/reports/doe/eent.htm",
+    new Date("2026-05-18T00:00:00Z"),
+    new Date("2026-08-18T23:59:59Z"),
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].companyName, "TENCENT");
+  assert.equal(rows[0].expectedDividendDate, "2026-06-01");
+  assert.equal(rows[0].dividendPerShare, "HKD5.3");
+});
+
 test("estimates dividend payment date from record date when payable date is absent", () => {
   const html = `
     <html><body>

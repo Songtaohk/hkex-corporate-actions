@@ -72,6 +72,54 @@ test("computes IPO fundraising size from offer shares and offer price", () => {
   assert.ok(enriched.notes.includes("募集規模按發售股數及發售價計算"));
 });
 
+test("uses global offering shares instead of post-listing share capital", () => {
+  const row = {
+    id: "ipo-3310",
+    kind: "ipo" as const,
+    companyName: "Viewtrix Technology Co., Ltd.",
+    stockCode: "3310",
+    expectedListingDate: null,
+    expectedFundLockupPeriod: null,
+    expectedSubscriptionMultiple: null,
+    expectedHearingDate: null,
+    expectedFundraisingSize: null,
+    sourceUrl: "https://example.test/viewtrix.pdf",
+    lastUpdated: "2026-05-27T00:00:00.000Z",
+    notes: ["官方頁面資料", "部分欄位未公布"],
+  };
+
+  const enriched = enrichIpoFromText(
+    row,
+    "GLOBAL OFFERING Number of Offer Shares under the Global Offering : 52,859,200 H Shares (subject to the Over-allotment Option) Number of Hong Kong Offer Shares : 5,286,000 H Shares Number of International Offer Shares : 47,573,200 H Shares Offer Price : HK$20.00 Global Offering, 374,919,750 Unlisted Shares are converted into H Shares on a one-for-one basis.",
+  );
+
+  assert.equal(enriched.expectedFundraisingSize, "HK$1.1 billion");
+});
+
+test("ignores total H shares after completion when computing IPO fundraising", () => {
+  const row = {
+    id: "ipo-2723",
+    kind: "ipo" as const,
+    companyName: "Beijing DeepZero Technology Co., Ltd.",
+    stockCode: "2723",
+    expectedListingDate: null,
+    expectedFundLockupPeriod: null,
+    expectedSubscriptionMultiple: null,
+    expectedHearingDate: null,
+    expectedFundraisingSize: null,
+    sourceUrl: "https://example.test/deepzero.pdf",
+    lastUpdated: "2026-05-27T00:00:00.000Z",
+    notes: ["官方頁面資料", "部分欄位未公布"],
+  };
+
+  const enriched = enrichIpoFromText(
+    row,
+    "GLOBAL OFFERING Number of Offer Shares under the Global Offering : 9,068,000 H Shares Number of Hong Kong Offer Shares : 906,800 H Shares Number of International Offer Shares : 8,161,200 H Shares Final Offer Price : HK$55.00 Upon completion of the Global Offering and the Conversion of Unlisted Shares into H Shares, the Company will have 90,679,175 H Shares.",
+  );
+
+  assert.equal(enriched.expectedFundraisingSize, "HK$498.7 million");
+});
+
 test("parses active Application Proof JSON into IPO pipeline rows", () => {
   const rows = parseApplicationProofJson(
     {

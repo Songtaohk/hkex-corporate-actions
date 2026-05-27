@@ -241,6 +241,18 @@ function extractFinalHkdOfferPrice(text: string) {
 }
 
 function extractOfferShares(text: string) {
+  const directPatterns = [
+    /Number\s+of\s+Offer\s+Shares\s+under\s+the\s+Global\s+Offering\s*:\s*([\d,]+)\s+(?:H\s+)?Shares?\b/i,
+    /Global\s+Offering\s+Number\s+of\s+Offer\s+Shares\s+under\s+the\s+Global\s+Offering\s*:\s*([\d,]+)\s+(?:H\s+)?Shares?\b/i,
+  ];
+
+  for (const pattern of directPatterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const shares = Number(match[1].replace(/,/g, ""));
+    if (Number.isFinite(shares) && shares > 0) return shares;
+  }
+
   const candidates: Array<{ shares: number; score: number }> = [];
   const sharePattern = /([\d,]{5,})\s+(?:H\s+)?(?:Offer\s+)?Shares?\b/gi;
   let match: RegExpExecArray | null;
@@ -256,7 +268,7 @@ function extractOfferShares(text: string) {
     if (!/global offering|offering|offer shares|public offer|international offer/i.test(context)) {
       continue;
     }
-    if (/issued share capital|shares in issue|total number of issued|market capitali[sz]ation/i.test(context)) {
+    if (isNonOfferShareContext(context)) {
       continue;
     }
 
@@ -274,6 +286,12 @@ function extractOfferShares(text: string) {
   if (candidates.length === 0) return null;
   candidates.sort((a, b) => b.score - a.score || b.shares - a.shares);
   return candidates[0].shares;
+}
+
+function isNonOfferShareContext(context: string) {
+  return /issued share capital|shares in issue|total number of issued|market capitali[sz]ation|upon completion|immediately upon completion|conversion of unlisted shares|converted into h shares|will have [\d,]+ h shares|existing shareholders?|shareholding|lock-up|allottees? with consent|relationship allottees/i.test(
+    context,
+  );
 }
 
 function formatHkdAmount(amountHkd: number) {

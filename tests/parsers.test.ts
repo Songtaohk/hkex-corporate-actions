@@ -19,6 +19,7 @@ import {
   classifyMainlandBusiness,
   filterMainlandBusinessDividends,
 } from "@/lib/services/securities";
+import { mergePreviouslyKnownFutureDividends } from "@/lib/services/snapshots";
 import type { DashboardResponse } from "@/lib/types";
 
 test("parses HKEX new listing rows and enriches IPO fields from PDF text", () => {
@@ -572,4 +573,80 @@ test("builds an English Excel workbook with required sheets", async () => {
   const sheet = workbook.getWorksheet("IPO");
   assert.equal(sheet?.getCell("A2").value, "Example IPO");
   assert.equal(sheet?.getCell("J2").value, "Estimated by rule");
+});
+
+test("preserves known future dividends that disappear from HKEX entitlement table", () => {
+  const previous: DashboardResponse = {
+    generatedAt: "2026-05-12T00:00:00.000Z",
+    rangeStart: "2026-05-12",
+    rangeEnd: "2026-08-12",
+    sourceStatus: [],
+    ipo: [],
+    placements: [],
+    dividends: [
+      {
+        id: "dividend-700-2026-06-01",
+        kind: "dividend",
+        companyName: "TENCENT",
+        stockCode: "700",
+        expectedDividendDate: "2026-06-01",
+        expectedTotalDividendAmount: "HKD 48.36 billion",
+        dividendPerShare: "HKD5.30",
+        sourceUrl: "https://www3.hkexnews.hk/reports/doe/eent.htm",
+        lastUpdated: "2026-05-12T00:00:00.000Z",
+        notes: ["官方分紅及權益表"],
+      },
+      {
+        id: "dividend-2388-2026-06-01",
+        kind: "dividend",
+        companyName: "BOC HONG KONG",
+        stockCode: "2388",
+        expectedDividendDate: "2026-06-01",
+        expectedTotalDividendAmount: "HKD 13.31 billion",
+        dividendPerShare: "HKD1.255",
+        sourceUrl: "https://www3.hkexnews.hk/reports/doe/eent.htm",
+        lastUpdated: "2026-05-12T00:00:00.000Z",
+        notes: ["官方分紅及權益表"],
+      },
+    ],
+  };
+
+  const next: DashboardResponse = {
+    generatedAt: "2026-05-27T00:00:00.000Z",
+    rangeStart: "2026-05-27",
+    rangeEnd: "2026-08-27",
+    sourceStatus: [],
+    ipo: [],
+    placements: [],
+    dividends: [
+      {
+        id: "dividend-2388-2026-07-20",
+        kind: "dividend",
+        companyName: "BOC HONG KONG",
+        stockCode: "2388",
+        expectedDividendDate: "2026-07-20",
+        expectedTotalDividendAmount: "HKD 13.30 billion",
+        dividendPerShare: "HKD1.255",
+        sourceUrl: "https://www3.hkexnews.hk/reports/doe/eent.htm",
+        lastUpdated: "2026-05-27T00:00:00.000Z",
+        notes: ["官方分紅及權益表"],
+      },
+    ],
+  };
+
+  const merged = mergePreviouslyKnownFutureDividends(next, previous);
+
+  assert.equal(merged.dividends.length, 2);
+  assert.ok(merged.dividends.some((item) => item.companyName === "TENCENT"));
+  assert.ok(
+    merged.dividends
+      .find((item) => item.companyName === "TENCENT")
+      ?.notes.includes("官方分紅表已移除，沿用前次快照至派息日"),
+  );
+  assert.equal(
+    merged.dividends.filter((item) => item.companyName === "BOC HONG KONG").length,
+    1,
+  );
+  assert.equal(merged.dividends.find((item) => item.companyName === "BOC HONG KONG")?.expectedDividendDate, "2026-07-20");
+  assert.ok(merged.sourceStatus.some((status) => status.name === "前次分紅快照保留"));
 });

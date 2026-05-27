@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildExcelWorkbook } from "../lib/services/excel";
 import { getDashboardData } from "../lib/services/official";
+import { mergePreviouslyKnownFutureDividends } from "../lib/services/snapshots";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dataDir = resolve(rootDir, "public/data");
@@ -11,8 +12,10 @@ const xlsxPath = resolve(dataDir, "latest.xlsx");
 
 await mkdir(dataDir, { recursive: true });
 
+const existingData = await readExistingData();
 const fetchedData = await getDashboardData(true);
-const data = await annotateRefreshStatus(fetchedData);
+const mergedData = mergePreviouslyKnownFutureDividends(fetchedData, existingData);
+const data = annotateRefreshStatus(mergedData, existingData);
 const workbook = await buildExcelWorkbook(data);
 
 await writeFile(jsonPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
@@ -24,9 +27,8 @@ console.log(
   `Rows: IPO ${data.ipo.length}, placements ${data.placements.length}, dividends ${data.dividends.length}`,
 );
 
-async function annotateRefreshStatus(data) {
+function annotateRefreshStatus(data, existingData) {
   const rowCount = data.ipo.length + data.placements.length + data.dividends.length;
-  const existingData = await readExistingData();
   const existingRowCount = existingData
     ? existingData.ipo.length + existingData.placements.length + existingData.dividends.length
     : 0;

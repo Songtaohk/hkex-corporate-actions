@@ -412,7 +412,11 @@ test("estimates dividend totals from dividend per share and HKEX shareholding pe
         dividendPerShare: "RMB0.30",
         sourceUrl: "https://example.test",
         lastUpdated: "2026-05-10T00:00:00.000Z",
-        notes: ["官方分紅及權益表", "分紅總規模未公布"],
+        notes: [
+          "官方分紅及權益表",
+          "分紅總規模未公布",
+          "股本公告查詢：未能在HKEXnews匹配股票代號",
+        ],
       },
     ],
     shareholdings,
@@ -462,6 +466,7 @@ test("estimates dividend totals from HKEXnews issued shares disclosure when sout
   assert.ok(estimated.notes.includes("股份數參考：HKEXnews Monthly Return"));
   assert.ok(estimated.notes.includes("股本資料來源：https://example.test/monthly-return.pdf"));
   assert.ok(!estimated.notes.includes("分紅總規模未公布"));
+  assert.ok(!estimated.notes.some((note) => note.startsWith("股本公告查詢：")));
 });
 
 

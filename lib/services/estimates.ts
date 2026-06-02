@@ -637,7 +637,9 @@ function withEstimatedDividendTotal(
   const total = perShare.amount * issuedShares;
   if (!Number.isFinite(total) || total <= 0) return dividend;
 
-  const notes = new Set(dividend.notes);
+  const notes = new Set(
+    dividend.notes.filter((note) => !note.startsWith("股本公告查詢：")),
+  );
   notes.delete("分紅總規模未公布");
   notes.add("按每股分紅預測");
   notes.add(shareSourceNote);

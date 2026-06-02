@@ -2,7 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildExcelWorkbook } from "../lib/services/excel";
-import { getDashboardData } from "../lib/services/official";
+import {
+  enrichDividendTotalsFromOfficialSources,
+  getDashboardData,
+} from "../lib/services/official";
 import { mergePreviouslyKnownFutureDividends } from "../lib/services/snapshots";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,7 +18,9 @@ await mkdir(dataDir, { recursive: true });
 const existingData = await readExistingData();
 const fetchedData = await getDashboardData(true);
 const mergedData = mergePreviouslyKnownFutureDividends(fetchedData, existingData);
-const data = annotateRefreshStatus(mergedData, existingData);
+const enrichedData = await enrichPreservedDividendTotals(mergedData);
+const cleanedData = cleanResolvedDividendDiagnostics(enrichedData);
+const data = annotateRefreshStatus(cleanedData, existingData);
 const workbook = await buildExcelWorkbook(data);
 
 await writeFile(jsonPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
@@ -82,4 +87,45 @@ async function readExistingData() {
   } catch {
     return null;
   }
+}
+
+async function enrichPreservedDividendTotals(data) {
+  const preservedNeedingEstimate = data.dividends.filter(
+    (item) =>
+      !item.expectedTotalDividendAmount &&
+      item.dividendPerShare &&
+      item.notes.includes("官方分紅表已移除，沿用前次快照至派息日"),
+  );
+
+  if (preservedNeedingEstimate.length === 0) return data;
+
+  const enrichedPreserved = await enrichDividendTotalsFromOfficialSources(
+    preservedNeedingEstimate,
+    data.sourceStatus,
+  );
+  const enrichedById = new Map(enrichedPreserved.map((item) => [item.id, item]));
+
+  return {
+    ...data,
+    dividends: data.dividends.map((item) => enrichedById.get(item.id) ?? item),
+  };
+}
+
+function cleanResolvedDividendDiagnostics(data) {
+  return {
+    ...data,
+    dividends: data.dividends.map((item) => {
+      if (
+        !item.expectedTotalDividendAmount ||
+        !item.notes.some((note) => note.startsWith("股本公告查詢："))
+      ) {
+        return item;
+      }
+
+      return {
+        ...item,
+        notes: item.notes.filter((note) => !note.startsWith("股本公告查詢：")),
+      };
+    }),
+  };
 }

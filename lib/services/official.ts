@@ -29,6 +29,7 @@ import {
   estimateDividendTotals,
   fetchSouthboundShareholding,
   type IssuedSharesEstimate,
+  type SouthboundShareholdingLookup,
 } from "./estimates";
 
 const IPO_URL =
@@ -39,6 +40,8 @@ const DIVIDEND_URL = "https://www3.hkexnews.hk/reports/doe/eent.htm";
 const DIVIDEND_GEM_URL = "https://www3.hkexnews.hk/reports/doe/eentgem.htm";
 const TITLE_SEARCH_URL = "https://www1.hkexnews.hk/search/titlesearch.xhtml?lang=en";
 const STOCK_PREFIX_URL = "https://www1.hkexnews.hk/search/prefix.do";
+const ACTIVE_STOCK_JSON_URL =
+  "https://www1.hkexnews.hk/ncms/script/eds/activestock_sehk_e.json";
 const AP_JSON_BASE = "https://www1.hkexnews.hk/ncms/json/eds/";
 const AP_ACTIVE_MAIN_URL = `${AP_JSON_BASE}appactive_app_sehk_e.json`;
 const AP_ACTIVE_PHIP_MAIN_URL = `${AP_JSON_BASE}appactive_appphip_sehk_e.json`;
@@ -166,24 +169,10 @@ export async function getDashboardData(forceRefresh = false) {
     allDividends,
     securities,
   );
-  const dividendsWithSouthboundTotals = estimateDividendTotals(
+  const dividends = await enrichDividendTotalsFromOfficialSources(
     mainlandDividends,
-    southboundShareholding,
-  );
-  const issuedSharesResult = await fetchIssuedSharesForDividends(
-    dividendsWithSouthboundTotals,
     sourceStatus,
-  );
-  const dividendsWithDisclosureNotes = addIssuedSharesDiagnostics(
-    dividendsWithSouthboundTotals,
-    issuedSharesResult.diagnostics,
-  );
-  const dividends = dedupeDividendCounters(
-    estimateDividendTotals(
-      dividendsWithDisclosureNotes,
-      southboundShareholding,
-      issuedSharesResult.lookup,
-    ),
+    southboundShareholding,
   );
 
   const entitlementPlacements = [
@@ -225,6 +214,34 @@ export async function getDashboardData(forceRefresh = false) {
   };
 
   return data;
+}
+
+export async function enrichDividendTotalsFromOfficialSources(
+  dividends: DividendEvent[],
+  sourceStatus: SourceStatus[],
+  southboundShareholding?: SouthboundShareholdingLookup,
+) {
+  const shareholding =
+    southboundShareholding ?? (await fetchSouthboundShareholding(sourceStatus));
+  const dividendsWithSouthboundTotals = estimateDividendTotals(
+    dividends,
+    shareholding,
+  );
+  const issuedSharesResult = await fetchIssuedSharesForDividends(
+    dividendsWithSouthboundTotals,
+    sourceStatus,
+  );
+  const dividendsWithDisclosureNotes = addIssuedSharesDiagnostics(
+    dividendsWithSouthboundTotals,
+    issuedSharesResult.diagnostics,
+  );
+  return dedupeDividendCounters(
+    estimateDividendTotals(
+      dividendsWithDisclosureNotes,
+      shareholding,
+      issuedSharesResult.lookup,
+    ),
+  );
 }
 
 async function fetchSource(
@@ -553,6 +570,7 @@ async function fetchHkexStockId(stockCode: string) {
     callback: "callback",
     lang: "EN",
     market: "SEHK",
+    type: "A",
     name: stockCode.padStart(5, "0"),
   });
 
@@ -565,10 +583,43 @@ async function fetchHkexStockId(stockCode: string) {
       },
       cache: "no-store",
     }).then((response) => (response.ok ? response.text() : ""));
-    return parseStockIdFromPrefixResponse(text, stockCode);
+    return (
+      parseStockIdFromPrefixResponse(text, stockCode) ??
+      (await fetchActiveStockId(stockCode))
+    );
   } catch {
-    return null;
+    return fetchActiveStockId(stockCode);
   }
+}
+
+let activeStockIdLookupPromise: Promise<Map<string, string>> | null = null;
+
+async function fetchActiveStockId(stockCode: string) {
+  const lookup = await getActiveStockIdLookup();
+  return lookup.get(stockCode.padStart(5, "0")) ?? null;
+}
+
+async function getActiveStockIdLookup() {
+  activeStockIdLookupPromise ??= fetch(ACTIVE_STOCK_JSON_URL, {
+    headers: {
+      "user-agent":
+        "Mozilla/5.0 (compatible; HKEX Corporate Actions Dashboard)",
+      accept: "application/json,*/*",
+    },
+    cache: "no-store",
+  })
+    .then((response) => (response.ok ? response.json() : []))
+    .then((rows: Array<{ i?: number | string; c?: string }>) => {
+      const lookup = new Map<string, string>();
+      for (const row of rows) {
+        if (row.i === undefined || !row.c) continue;
+        lookup.set(row.c, String(row.i));
+      }
+      return lookup;
+    })
+    .catch(() => new Map<string, string>());
+
+  return activeStockIdLookupPromise;
 }
 
 function parseStockIdFromPrefixResponse(text: string, stockCode: string) {

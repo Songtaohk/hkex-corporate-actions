@@ -24,6 +24,21 @@ type IpoSortKey = "listingDate" | "hearingDate" | "fundraisingSize";
 type PlacementSortKey = "listingDate" | "fundraisingSize";
 type DividendSortKey = "dividendDate" | "totalAmount";
 type Language = "zh" | "en";
+type WeeklySummaryKind = CorporateActionKind;
+
+type WeeklySummaryItem = {
+  key: WeeklySummaryKind;
+  totalUsd: number;
+  eventCount: number;
+  amountCount: number;
+};
+
+type WeeklySummary = {
+  startDate: string;
+  endDate: string;
+  items: WeeklySummaryItem[];
+  totalUsd: number;
+};
 
 type IpoTableLabels = {
   company: string;
@@ -77,6 +92,12 @@ type UiText = {
   lastUpdated: string;
   refreshTime: string;
   summaryAria: string;
+  weeklySummaryAria: string;
+  weeklySummaryKicker: string;
+  weeklySummaryTitle: string;
+  weeklySummaryDescription: (startDate: string, endDate: string) => string;
+  weeklyTotal: string;
+  weeklyCount: (amountCount: number, eventCount: number) => string;
   searchPlaceholder: string;
   sort: string;
   futureThreeMonths: string;
@@ -130,6 +151,14 @@ const uiText: Record<Language, UiText> = {
     lastUpdated: "最後更新",
     refreshTime: "刷新時間",
     summaryAria: "資料摘要",
+    weeklySummaryAria: "未來一周美元規模匯總",
+    weeklySummaryKicker: "未來一周 · 美元口徑",
+    weeklySummaryTitle: "IPO、增發及中資分紅規模匯總",
+    weeklySummaryDescription: (startDate, endDate) =>
+      `${startDate} 至 ${endDate}，以香港日期計算；未公布金額不計入。換算假設：HKD 7.80/USD，RMB 7.20/USD。`,
+    weeklyTotal: "合計",
+    weeklyCount: (amountCount, eventCount) =>
+      `${amountCount} 筆有金額 / ${eventCount} 筆事項`,
     searchPlaceholder: "搜尋公司名稱或代號",
     sort: "排序",
     futureThreeMonths: "未來三個月",
@@ -218,6 +247,14 @@ const uiText: Record<Language, UiText> = {
     lastUpdated: "Last Updated",
     refreshTime: "Refresh Time",
     summaryAria: "Data summary",
+    weeklySummaryAria: "Next-week USD size summary",
+    weeklySummaryKicker: "Next 7 days · USD view",
+    weeklySummaryTitle: "IPO, placement and China dividend size summary",
+    weeklySummaryDescription: (startDate, endDate) =>
+      `${startDate} to ${endDate}, based on Hong Kong dates. Undisclosed amounts are excluded. FX assumptions: HKD 7.80/USD, RMB 7.20/USD.`,
+    weeklyTotal: "Total",
+    weeklyCount: (amountCount, eventCount) =>
+      `${amountCount} with amounts / ${eventCount} events`,
     searchPlaceholder: "Search company name or code",
     sort: "Sort",
     futureThreeMonths: "Next three months",
@@ -477,6 +514,11 @@ export default function Home() {
     return sortPlacementRows(filtered as PlacementEvent[], placementSort);
   }, [active, data, dividendSort, ipoSort, placementSort, query]);
 
+  const weeklySummary = useMemo(() => {
+    if (!data) return null;
+    return buildWeeklySummary(data);
+  }, [data]);
+
   const totalCount = data
     ? data.ipo.length + data.placements.length + data.dividends.length
     : 0;
@@ -546,6 +588,14 @@ export default function Home() {
           value={lastRefreshAt ? formatMinute(lastRefreshAt, language) : "--"}
         />
       </section>
+
+      {weeklySummary ? (
+        <WeeklySummaryPanel
+          summary={weeklySummary}
+          labels={t}
+          language={language}
+        />
+      ) : null}
 
       <section className={styles.controls}>
         <div className={styles.tabs} role="tablist" aria-label={t.pageLanguageLabel === "Language" ? "Event type" : "事項類型"}>
@@ -691,6 +741,80 @@ function SummaryCard({
   );
 }
 
+function WeeklySummaryPanel({
+  summary,
+  labels,
+  language,
+}: {
+  summary: WeeklySummary;
+  labels: UiText;
+  language: Language;
+}) {
+  return (
+    <section className={styles.weeklySummary} aria-label={labels.weeklySummaryAria}>
+      <div className={styles.weeklySummaryIntro}>
+        <span>{labels.weeklySummaryKicker}</span>
+        <h2>{labels.weeklySummaryTitle}</h2>
+        <p>
+          {labels.weeklySummaryDescription(
+            formatDateKey(summary.startDate, language),
+            formatDateKey(summary.endDate, language),
+          )}
+        </p>
+      </div>
+      <div className={styles.weeklySummaryCards}>
+        <WeeklyAmountCard
+          label={labels.weeklyTotal}
+          value={summary.totalUsd}
+          detail={labels.weeklyCount(
+            summary.items.reduce((total, item) => total + item.amountCount, 0),
+            summary.items.reduce((total, item) => total + item.eventCount, 0),
+          )}
+          language={language}
+          emphasized
+        />
+        {summary.items.map((item) => (
+          <WeeklyAmountCard
+            key={item.key}
+            label={labels.tabs[item.key]}
+            value={item.totalUsd}
+            detail={labels.weeklyCount(item.amountCount, item.eventCount)}
+            language={language}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WeeklyAmountCard({
+  label,
+  value,
+  detail,
+  language,
+  emphasized = false,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  language: Language;
+  emphasized?: boolean;
+}) {
+  return (
+    <div
+      className={
+        emphasized
+          ? `${styles.weeklyAmountCard} ${styles.weeklyAmountCardPrimary}`
+          : styles.weeklyAmountCard
+      }
+    >
+      <span>{label}</span>
+      <strong>{formatUsd(value, language)}</strong>
+      <small>{detail}</small>
+    </div>
+  );
+}
+
 function sortIpoRows(rows: IpoEvent[], sortKey: IpoSortKey) {
   const sorted = [...rows];
   if (sortKey === "listingDate") {
@@ -771,6 +895,148 @@ function amountRank(value: string | null) {
       : 1;
 
   return number * unitMultiplier * currencyMultiplier;
+}
+
+function buildWeeklySummary(data: DashboardResponse): WeeklySummary {
+  const startDate = getHongKongDateKey();
+  const endDate = addDaysToDateKey(startDate, 6);
+  const ipo = summarizeWeeklyItems(
+    data.ipo,
+    (item) => item.expectedListingDate,
+    (item) => item.expectedFundraisingSize,
+  );
+  const placements = summarizeWeeklyItems(
+    data.placements,
+    (item) => item.expectedNewSharesListingDate,
+    (item) => item.expectedFundraisingSize,
+  );
+  const dividends = summarizeWeeklyItems(
+    data.dividends,
+    (item) => item.expectedDividendDate,
+    (item) => item.expectedTotalDividendAmount,
+  );
+  const items: WeeklySummaryItem[] = [
+    { key: "ipo", ...ipo },
+    { key: "placement", ...placements },
+    { key: "dividend", ...dividends },
+  ];
+
+  return {
+    startDate,
+    endDate,
+    items,
+    totalUsd: items.reduce((total, item) => total + item.totalUsd, 0),
+  };
+
+  function summarizeWeeklyItems<T>(
+    itemsToSummarize: T[],
+    getDate: (item: T) => string | null,
+    getAmount: (item: T) => string | null,
+  ) {
+    return itemsToSummarize.reduce(
+      (summary, item) => {
+        const dateKey = extractDateKey(getDate(item));
+        if (!dateKey || dateKey < startDate || dateKey > endDate) {
+          return summary;
+        }
+
+        const amountUsd = parseMoneyToUsd(getAmount(item));
+        return {
+          eventCount: summary.eventCount + 1,
+          amountCount: summary.amountCount + (amountUsd === null ? 0 : 1),
+          totalUsd: summary.totalUsd + (amountUsd ?? 0),
+        };
+      },
+      { totalUsd: 0, eventCount: 0, amountCount: 0 },
+    );
+  }
+}
+
+function getHongKongDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Hong_Kong",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? "1970";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const day = parts.find((part) => part.type === "day")?.value ?? "01";
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysToDateKey(dateKey: string, days: number) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return date.toISOString().slice(0, 10);
+}
+
+function extractDateKey(value: string | null) {
+  return value?.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
+}
+
+function formatDateKey(dateKey: string, language: Language) {
+  const date = new Date(`${dateKey}T00:00:00+08:00`);
+  return date.toLocaleDateString(language === "en" ? "en-HK" : "zh-HK", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+function parseMoneyToUsd(value: string | null) {
+  if (!value) return null;
+  const clean = value.replace(/,/g, "").replace(/\s+/g, " ");
+  const match = clean.match(
+    /(?:HK\$|HKD|RMB|CNY|US\$|USD)?\s*([\d.]+)\s*(billion|million|bn|m)?/i,
+  );
+  if (!match) return null;
+
+  const number = Number(match[1]);
+  if (!Number.isFinite(number)) return null;
+
+  const unit = match[2]?.toLowerCase();
+  const unitMultiplier =
+    unit === "billion" || unit === "bn"
+      ? 1_000_000_000
+      : unit === "million" || unit === "m"
+        ? 1_000_000
+        : 1;
+
+  const currency = detectCurrency(clean);
+  const usdRate =
+    currency === "USD" ? 1 : currency === "RMB" || currency === "CNY" ? 1 / 7.2 : 1 / 7.8;
+
+  return number * unitMultiplier * usdRate;
+}
+
+function detectCurrency(value: string) {
+  const upper = value.toUpperCase();
+  if (upper.includes("USD") || upper.includes("US$")) return "USD";
+  if (upper.includes("RMB")) return "RMB";
+  if (upper.includes("CNY")) return "CNY";
+  return "HKD";
+}
+
+function formatUsd(value: number, language: Language) {
+  if (!Number.isFinite(value) || value <= 0) return "US$0";
+  const locale = language === "en" ? "en-US" : "zh-HK";
+  if (value >= 1_000_000_000) {
+    return `US$${formatCompactNumber(value / 1_000_000_000, locale)} billion`;
+  }
+  if (value >= 1_000_000) {
+    return `US$${formatCompactNumber(value / 1_000_000, locale)} million`;
+  }
+  if (value >= 1_000) {
+    return `US$${formatCompactNumber(value / 1_000, locale)} thousand`;
+  }
+  return `US$${Math.round(value).toLocaleString(locale)}`;
+}
+
+function formatCompactNumber(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, {
+    maximumFractionDigits: value >= 10 ? 1 : 2,
+  }).format(value);
 }
 
 function SourceLink({ url, label }: { url: string; label: string }) {

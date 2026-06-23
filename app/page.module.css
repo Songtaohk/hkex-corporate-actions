@@ -166,6 +166,92 @@
   grid-column: span 2;
 }
 
+.weeklySummary {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.6fr);
+  gap: 18px;
+  align-items: stretch;
+  margin: 0 0 20px;
+  padding: 20px;
+  border: 1px solid rgba(31, 111, 120, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(31, 111, 120, 0.1), rgba(182, 95, 42, 0.08)),
+    var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.weeklySummaryIntro {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.weeklySummaryIntro span {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.weeklySummaryIntro h2 {
+  margin: 8px 0 8px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.weeklySummaryIntro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.weeklySummaryCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.weeklyAmountCard {
+  min-height: 128px;
+  padding: 16px;
+  border: 1px solid rgba(217, 222, 231, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.weeklyAmountCard span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.weeklyAmountCard strong {
+  display: block;
+  margin: 12px 0 8px;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.weeklyAmountCard small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.weeklyAmountCardPrimary {
+  border-color: rgba(31, 111, 120, 0.35);
+  background: var(--primary);
+  color: white;
+}
+
+.weeklyAmountCardPrimary span,
+.weeklyAmountCardPrimary small {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .controls {
   justify-content: space-between;
   gap: 16px;
@@ -418,6 +504,15 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .weeklySummary {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .weeklySummaryCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .wideCard {
     grid-column: span 2;
   }
@@ -448,5 +543,11 @@
 
   .rangeBadge {
     justify-content: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .weeklySummaryCards {
+    grid-template-columns: 1fr;
   }
 }
